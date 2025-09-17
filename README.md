@@ -50,10 +50,7 @@ This repository contains the source code, infrastructure templates, and supporti
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Test your changes thoroughly
-4. Submit a pull request
+See [CONTRIBUTING](CONTRIBUTING.md) for more information.
 
 ## Security
 
