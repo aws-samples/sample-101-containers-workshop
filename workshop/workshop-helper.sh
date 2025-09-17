@@ -365,6 +365,9 @@ deploy_ecs_cluster() {
     echo "Enabling container insights..."
     aws ecs put-account-setting --name containerInsights --value enhanced
 
+    echo "Creating ECS Service Linked Role (if not exists)..."
+    aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com 2>/dev/null || echo "ECS Service Linked Role already exists"
+
     echo "Creating ECS cluster..."
     aws ecs create-cluster \
         --cluster-name REPLACE_PREFIX_CODE-ecs \
