@@ -334,6 +334,22 @@ deploy_ecs_cluster() {
     USERDATA=$(base64 -w 0 /home/ec2-user/workspace/my-workspace/workshop/ecs-cluster-bootstrap.sh)
     ECS_AMI_ID=$(aws ssm get-parameters --names /aws/service/ecs/optimized-ami/amazon-linux-2023/arm64/recommended/image_id --query "Parameters[0].Value" --output text)
 
+    echo "Enabling container insights..."
+    aws ecs put-account-setting --name containerInsights --value enhanced
+
+    echo "Creating ECS Service Linked Role (if not exists)..."
+    aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com 2>/dev/null || echo "ECS Service Linked Role already exists"
+
+    echo "Creating ECS cluster..."
+    aws ecs create-cluster \
+        --cluster-name REPLACE_PREFIX_CODE-ecs \
+        --service-connect-defaults namespace=REPLACE_PREFIX_CODE \
+        --settings name=containerInsights,value=enhanced \
+        --no-cli-pager
+
+    echo "Waiting for cluster to be active..."
+    until aws ecs describe-clusters --clusters REPLACE_PREFIX_CODE-ecs --query 'clusters[0].status' --output text | grep -q ACTIVE; do sleep 5; done
+
     echo "Creating launch template..."
     aws ec2 create-launch-template \
         --launch-template-name REPLACE_PREFIX_CODE-launchtemplate-ecs \
@@ -361,22 +377,6 @@ deploy_ecs_cluster() {
 
     ASG_ARN=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names REPLACE_PREFIX_CODE-asg-ecs --query 'AutoScalingGroups[0].AutoScalingGroupARN' --output text)
     save_variable "ASG_ARN" "$ASG_ARN"
-
-    echo "Enabling container insights..."
-    aws ecs put-account-setting --name containerInsights --value enhanced
-
-    echo "Creating ECS Service Linked Role (if not exists)..."
-    aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com 2>/dev/null || echo "ECS Service Linked Role already exists"
-
-    echo "Creating ECS cluster..."
-    aws ecs create-cluster \
-        --cluster-name REPLACE_PREFIX_CODE-ecs \
-        --service-connect-defaults namespace=REPLACE_PREFIX_CODE \
-        --settings name=containerInsights,value=enhanced \
-        --no-cli-pager
-
-    echo "Waiting for cluster to be active..."
-    until aws ecs describe-clusters --clusters REPLACE_PREFIX_CODE-ecs --query 'clusters[0].status' --output text | grep -q ACTIVE; do sleep 5; done
 
     echo "Creating capacity provider..."
     aws ecs create-capacity-provider \
