@@ -1,0 +1,33 @@
+# Security scan outputs
+#.ash/
+*.sarif
+
+# Terraform files
+terraform-dev/.terraform/
+terraform-dev/terraform.tfstate*
+terraform-dev/*.tfplan
+terraform-dev/crash.log
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak

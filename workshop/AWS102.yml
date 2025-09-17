@@ -1,0 +1,3851 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Amazon Web Services AWS101 - Containers Workshop scaffolding
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Networking
+        Parameters:
+          - VpcCidr
+      - Label:
+          default: Deployment Settings
+        Parameters:
+          - CodeServerVersion
+          - GitHubRepo
+          - S3AssetBucket
+          - S3AssetPrefix
+          - DeployPipeline
+          - RotateSecret
+          - AutoSetDeveloperProfile
+          - InstallDotNet
+      - Label:
+          default: Compute settings
+        Parameters:
+          - InstanceArchitecture
+          - InstanceType
+          - AMIx86CodeServer
+          - AMIArmCodeServer
+      - Label:
+          default: Tagging and Naming
+        Parameters:
+          - PrefixCode
+          - SolutionTag
+          - EnvironmentTag
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: "10.180"
+    Description: Network addressing prefix (first two octets) for VPC and subnet CIDR blocks, e.g., '10.180'
+  GitHubRepo:
+    Type: String
+    Default: https://github.com/aws-samples/sample-101-containers-workshop.git
+    Description: GitHub repository URL to clone as initial workspace content for code-server
+  S3AssetBucket:
+    Type: String
+    Default: ""
+    Description: (Optional) S3 path for initial workspace content in format 'my-bucket-name'. If provided, this OVERWRITES GitHubRepo parameter.
+  S3AssetPrefix:
+    Type: String
+    Default: ""
+    Description: (Optional) Asset prefix path. Only required when S3AssetBucket is specified. Must end in '/' e.g. 'assets/' or 'assets/solution/'
+  DeployPipeline:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+    Description: Deploy AWS CodePipeline with CodeBuild to automatically build/destroy infrastructure using Terraform
+  RotateSecret:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+    Description: Rotate code-server secret every 30 days.
+  AutoSetDeveloperProfile:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+    Description: Automatically set Developer profile as default in code-server terminal sessions without requiring elevation
+  InstallDotNet:
+    Type: String
+    Default: false
+    Description: "Install .NET SDK"
+    AllowedValues:
+      - true
+      - false
+  CodeServerVersion:
+    Type: String
+    Default: "4.103.2"
+    Description: Version of code-server to install. See available versions at github.com/coder/code-server/releases
+  InstanceArchitecture:
+    Type: String
+    Default: arm64
+    AllowedValues:
+      - amd64
+      - arm64
+    Description: Choose amd64 for AMD/Intel instances or arm64 for Graviton instances
+  InstanceType:
+    Type: String
+    Default: t4g.large
+    Description: EC2 instance type MUST match architecture. amd64= t3.small, t3a.large, c6i.xlarge, m6a.2xlarge, etc. arm64= t4g.large, c7g.xlarge, m6g.2xlarge, etc.Template will fail if mismatched.
+  AMIx86CodeServer:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: SSM parameter path for x86_64 AMI (used for AMD/Intel instances)
+  AMIArmCodeServer:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: SSM parameter path for arm64 AMI (used for Graviton instances)
+  PrefixCode:
+    Type: String
+    Default: wildlife
+    Description: Resource naming prefix for uniqueness and organization. Six characters or less. Must be lowercase alphanumeric and cannot start with 'aws'
+  EnvironmentTag:
+    Type: String
+    Default: production
+    Description: Environment identifier for resource tagging e.g. dev, prod
+  SolutionTag:
+    Type: String
+    Default: SampleDeveloperEnvironment
+    Description: Solution identifier for resource tagging and grouping. Use alphanumeric characters only
+
+### Region to CloudFront Prefix List mapping - delete regions not required for deployment
+### To get prefix list for your region: aws ec2 describe-managed-prefix-lists --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing
+Mappings:
+  RegionMap:
+    ap-northeast-1:
+      CloudFrontPrefixList: pl-58a04531
+      ALBAccount: 582318560864
+    ap-northeast-2:
+      CloudFrontPrefixList: pl-22a6434b
+      ALBAccount: 600734575887
+    ap-northeast-3:
+      CloudFrontPrefixList: pl-31a14458
+      ALBAccount: 383597477331
+    ap-south-1:
+      CloudFrontPrefixList: pl-9aa247f3
+      ALBAccount: 718504428378
+    ap-southeast-1:
+      CloudFrontPrefixList: pl-31a34658
+      ALBAccount: 114774131450
+    ap-southeast-2:
+      CloudFrontPrefixList: pl-b8a742d1
+      ALBAccount: 783225319266
+    ca-central-1:
+      CloudFrontPrefixList: pl-38a64351
+      ALBAccount: 985666609251
+    eu-central-1:
+      CloudFrontPrefixList: pl-a3a144ca
+      ALBAccount: 054676820928
+    eu-north-1:
+      CloudFrontPrefixList: pl-fab65393
+      ALBAccount: 897822967062
+    eu-west-1:
+      CloudFrontPrefixList: pl-4fa04526
+      ALBAccount: 156460612806
+    eu-west-2:
+      CloudFrontPrefixList: pl-93a247fa
+      ALBAccount: 652711504416
+    eu-west-3:
+      CloudFrontPrefixList: pl-75b1541c
+      ALBAccount: 009996457667
+    sa-east-1:
+      CloudFrontPrefixList: pl-5da64334
+      ALBAccount: 507241528517
+    us-east-1:
+      CloudFrontPrefixList: pl-3b927c52
+      ALBAccount: 127311923021
+    us-east-2:
+      CloudFrontPrefixList: pl-b6a144df
+      ALBAccount: 033677994240
+    us-west-1:
+      CloudFrontPrefixList: pl-4ea04527
+      ALBAccount: 027434742980
+    us-west-2:
+      CloudFrontPrefixList: pl-82a045eb
+      ALBAccount: 797873946194
+
+Conditions:
+  CreatePipeline: !Equals [!Ref DeployPipeline, "true"]
+  EnableRotation: !Equals [!Ref RotateSecret, "true"]
+  IsArm64: !Equals [!Ref InstanceArchitecture, 'arm64']
+  HasS3Assets: !Not [!Equals [!Ref S3AssetBucket, ""]]
+
+Resources:
+  ### Resource Group - Groups all AWS resources for easy management and tracking
+  resourcegroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Description: Sample Developer Environment Resources
+      Name: !Sub ${PrefixCode}-resources
+      ResourceQuery:
+        Type: TAG_FILTERS_1_0
+        Query:
+          ResourceTypeFilters:
+            - AWS::AllSupported
+          TagFilters:
+            - Key: solution
+              Values:
+                - !Sub ${SolutionTag}
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-resources
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: resourcetype
+          Value: management
+
+  ### KMS - Central encryption key for CloudWatch Logs, Secrets Manager, and other AWS services
+  kmskey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Shared encryption key for AWS services
+      PendingWindowInDays: 7
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-default-1
+        Statement:
+          - Sid: Enable IAM User Permissions
+            # https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-overview.html
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action:
+              - kms:*
+            Resource: "*"
+          - Sid: Enable Cloudwatch access to KMS Key for VPC log group
+            # https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt*
+              - kms:Decrypt*
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: "*"
+            Condition:
+              ArnLike:
+                "kms:EncryptionContext:aws:logs:arn": !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
+          - Sid: Enable EFS access to KMS Key
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                "kms:ViaService": !Sub "elasticfilesystem.${AWS::Region}.amazonaws.com"
+                "kms:CallerAccount": !Ref AWS::AccountId
+      Tags:
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: resourcetype
+          Value: security
+  kmskeyalias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${PrefixCode}-kms-cmk
+      TargetKeyId: !Ref kmskey
+
+  ### Network Infrastructure - VPC with public/private subnets and flow logs for developer environment
+  vpc01:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Sub ${VpcCidr}.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-vpc01
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: resourcetype
+          Value: network
+  iamrolevpcflowlogs:
+    Type: AWS::IAM::Role
+    # https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs-cwl.html
+    Properties:
+      RoleName: !Sub ${PrefixCode}-iamrole-vpcflowlogs
+      Description: Publish flow logs to CloudWatch Logs
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-VpcFlowLogsPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/events/${PrefixCode}-vpcflowlog:*
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/events/${PrefixCode}-vpcflowlog:*:*
+                Condition:
+                  StringEquals:
+                    aws:SourceAccount: !Sub "${AWS::AccountId}"
+                  ArnLike:
+                    "aws:SourceArn": !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:*"
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iamrole-VpcFlowLogs
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-IAM5
+            reason: "https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs-iam-role.html"
+  vpcloggroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/vpc/${PrefixCode}-flowlogs
+      RetentionInDays: 14
+      KmsKeyId: !GetAtt kmskey.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-vpcflowloggroup
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: monitoring
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  vpcflowlog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt iamrolevpcflowlogs.Arn
+      LogGroupName: !Ref vpcloggroup
+      ResourceId: !Ref vpc01
+      ResourceType: VPC
+      TrafficType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-vpcflowlog
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: monitoring
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  internetgateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-internetgateway
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  internetgatewayattach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref vpc01
+      InternetGatewayId: !Ref internetgateway
+  subnetpublic01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref vpc01
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Sub ${VpcCidr}.1.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-subnet-public01-AvailabilityZone01
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  # Second public subnet required for ALB
+  subnetpublic02:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref vpc01
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Sub ${VpcCidr}.2.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-subnet-public02-AvailabilityZone02
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  subnetprivate01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref vpc01
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Sub ${VpcCidr}.3.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-subnet-private01-AvailabilityZone01
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  elasticip01:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-eip-AvailabilityZone01
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  natgateway01:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt elasticip01.AllocationId
+      SubnetId: !Ref subnetpublic01
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-nat-public01-AvailabilityZone01
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    DependsOn: internetgateway
+  routetablepublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc01
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-routetable-public
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  routepublic:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref routetablepublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !GetAtt internetgateway.InternetGatewayId
+  routeassociationpublic01:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subnetpublic01
+      RouteTableId: !Ref routetablepublic
+  routeassociationpublic02:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subnetpublic02
+      RouteTableId: !Ref routetablepublic
+  routetableprivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc01
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-routetable-private1-AvailabilityZone1
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  routeprivate:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref routetableprivate
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !GetAtt natgateway01.NatGatewayId
+  routeassociationprivate:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subnetprivate01
+      RouteTableId: !Ref routetableprivate
+
+  ### Centralized logging bucket for CloudFront and S3 access logs
+  s3bucketlogs:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 30
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-logs
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: storage
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: "This is an access logs bucket and does not need its own access logging."
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "This is an access logs bucket and does not need its own access logging."
+  s3bucketpolicylogs:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref s3bucketlogs
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: EnforceSecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: Allow TLS 1.2 and above
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/*
+            Condition:
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+          # https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html
+          - Sid: Allow ALB logging access regions available as of August 2022 or later
+            Effect: Allow
+            Principal:
+              Service: logdelivery.elasticloadbalancing.amazonaws.com
+            Action:
+              - s3:PutObject
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/*
+          - Sid: Allow ALB logging access regions available before August 2022
+            Effect: Allow
+            Principal:
+              AWS: 
+                !Join 
+                  - ""
+                  - - "arn:"
+                    - !Ref AWS::Partition
+                    - ":iam::"
+                    - !FindInMap [RegionMap, !Ref "AWS::Region", ALBAccount]
+                    - ":root"
+            Action:
+              - s3:PutObject
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/*
+          - Sid: Allow S3 Logging Service for git and artifact buckets
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action: s3:PutObject
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/s3-logs/git/*
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/s3-logs/pipeline/*
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn:
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+          - !If
+            # BEWARE: Inline condition for artifact bucket logging - can't be grouped due to policy structure.
+            - CreatePipeline
+            - Sid: Allow S3 Logging Service for artifact bucket
+              Effect: Allow
+              Principal:
+                Service: logging.s3.amazonaws.com
+              Action: s3:PutObject
+              Resource:
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/s3-logs/pipeline/*
+              Condition:
+                StringEquals:
+                  aws:SourceAccount: !Ref AWS::AccountId
+                ArnLike:
+                  aws:SourceArn:
+                    - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}
+            - !Ref AWS::NoValue
+          - Sid: Allow ALB Logging
+            Effect: Allow
+            Principal:
+              AWS: !Join 
+                - ""
+                - - "arn:"
+                  - !Ref AWS::Partition
+                  - ":iam::"
+                  - !FindInMap [RegionMap, !Ref "AWS::Region", ALBAccount]
+                  - ":root"
+            Action: s3:PutObject
+            Resource: !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/alb-logs/*
+
+  ### Access Layer - ALB and CloudFront distribution for secure access to code-server
+  albcodeserver:
+    DependsOn: internetgatewayattach
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${PrefixCode}-alb-codeserver
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref subnetpublic01
+        - !Ref subnetpublic02
+      SecurityGroups:
+        - !Ref securitygroupalb
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: true
+        - Key: access_logs.s3.bucket
+          Value: !Ref s3bucketlogs
+        - Key: access_logs.s3.prefix
+          Value: alb-logs
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-alb-codeserver
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: CKV_AWS_131
+            reason: "ALB uses HTTP for internal AWS traffic. Security handled by CloudFront HTTPS and origin verification. Consider end-to-end HTTPS if required."
+      checkov:
+        skip:
+          - id: CKV_AWS_131
+            comment: "ALB uses HTTP for internal AWS traffic. Security handled by CloudFront HTTPS and origin verification. Consider end-to-end HTTPS if required."
+  albtargetgroupcodeserver:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: /login
+      HealthCheckPort: 8080
+      Name: !Sub ${PrefixCode}-targetgroup-codeserver
+      Port: 8080
+      Protocol: HTTP
+      TargetType: instance
+      Targets:
+        - Id: !Ref ec2codeserver
+      VpcId: !Ref vpc01
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-targetgroup-codeserver
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  # ALB listener default rule blocks all traffic unless coming from CloudFront with correct secret header
+  alblistenercodeserver:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: "Access Denied"
+            StatusCode: 403
+      LoadBalancerArn: !Ref albcodeserver
+      Port: 80
+      Protocol: HTTP
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W56
+            reason: "ALB uses HTTP for internal AWS traffic. Security handled by CloudFront HTTPS and origin verification. Consider end-to-end HTTPS if required."
+          - id: CKV_AWS_103
+            reason: "TLS check not applicable - ALB uses HTTP internally. External TLS 1.2 enforced at CloudFront. Consider end-to-end HTTPS if required."
+      checkov:
+        skip:
+          - id: CKV_AWS_2
+            comment: "ALB uses HTTP for internal AWS traffic. Security handled by CloudFront HTTPS and origin verification. Consider end-to-end HTTPS if required."
+          - id: CKV_AWS_103
+            comment: "TLS check not applicable - ALB uses HTTP internally. External TLS 1.2 enforced at CloudFront. Consider end-to-end HTTPS if required."
+  # Allow traffic only if secret header from CloudFront is present
+  alblistenerrulecodeserver:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref albtargetgroupcodeserver
+      Conditions:
+        - Field: http-header
+          HttpHeaderConfig:
+            HttpHeaderName: !Sub "{{resolve:secretsmanager:${cloudfrontsecretheadercodeserver}:SecretString:HeaderName}}"
+            Values:
+              - !Sub "{{resolve:secretsmanager:${cloudfrontsecretheadercodeserver}:SecretString:HeaderValue}}"
+      ListenerArn: !Ref alblistenercodeserver
+      Priority: 10
+  # Security group allows traffic only from CloudFront IP ranges
+  securitygroupalb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${PrefixCode}-securitygroup-alb
+      GroupDescription: ALB security group
+      VpcId: !Ref vpc01
+      SecurityGroupIngress:
+        - Description: HTTP inbound from CloudFront
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourcePrefixListId: !FindInMap [RegionMap, !Ref "AWS::Region", CloudFrontPrefixList]
+      SecurityGroupEgress:
+        - Description: Allow to EC2
+          IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          DestinationSecurityGroupId: !Ref securitygroupcodeserver
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-securitygroup-alb
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W42
+            reason: "Security group allows all protocols (-1) for internal VPC communication. Scoped to VPC CIDR only, not internet-facing."
+          - id: W40
+            reason: "Egress rule allows all protocols within VPC for AWS service access. Scoped to VPC CIDR only, not internet-facing."
+          - id: W5
+            reason: "Development environment requires outbound access for package downloads and Git operations. Consider restricting in production."
+          - id: W9
+            reason: "Security group allows CloudFront prefix list which includes multiple /16 ranges. This is required for CloudFront origin access."
+      checkov:
+        skip:
+          - id: CKV_AWS_260
+            comment: "Security group allows CloudFront prefix list access which is required for origin verification. More restrictive than 0.0.0.0/0."
+  cloudfrontcachepolcodeserver:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Comment: Cache policy for VS code-server allows caching with cookie/header/query string forwarding
+        DefaultTTL: 86400
+        MaxTTL: 31536000
+        MinTTL: 1
+        Name: !Sub ${PrefixCode}-cloudfront-policy
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: all
+          EnableAcceptEncodingGzip: true
+          HeadersConfig:
+            HeaderBehavior: whitelist
+            Headers:
+              - Host
+              - Origin
+              - Authorization
+          QueryStringsConfig:
+            QueryStringBehavior: all
+  # CloudFront distribution adds secret header to all requests to ALB
+  cloudfrontdistributioncodeserver:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Origins:
+          - DomainName: !GetAtt albcodeserver.DNSName
+            Id: CodeServerOrigin
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+            # Add secret header to all requests to prevent direct ALB access
+            OriginCustomHeaders:
+              - HeaderName: !Sub "{{resolve:secretsmanager:${cloudfrontsecretheadercodeserver}:SecretString:HeaderName}}"
+                HeaderValue: !Sub "{{resolve:secretsmanager:${cloudfrontsecretheadercodeserver}:SecretString:HeaderValue}}"
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - PATCH
+            - POST
+            - DELETE
+          CachePolicyId: !Ref cloudfrontcachepolcodeserver
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3  # Managed AllViewer Policy
+          TargetOriginId: CodeServerOrigin
+          ViewerProtocolPolicy: redirect-to-https
+        ### START: Workshop sample Wildlife application ###
+        CacheBehaviors:
+          - PathPattern: /wildlife/*
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - PATCH
+              - POST
+              - DELETE
+            CachedMethods:
+              - GET
+              - HEAD
+            CachePolicyId: !Ref cloudfrontcachepolcodeserver
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+            TargetOriginId: CodeServerOrigin
+            ViewerProtocolPolicy: redirect-to-https
+        ### END: Workshop sample Wildlife application ###
+        Logging:
+          Bucket: !GetAtt s3bucketlogs.DomainName
+          IncludeCookies: false
+          Prefix: cloudfront-logs/
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-cloudfrontdistribution-alb
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W70
+            reason: "CloudFront uses TLS 1.2 by default with redirect-to-https ViewerProtocolPolicy. Explicit MinimumProtocolVersion not required for default TLS 1.2 behavior."
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-CFR4
+            reason: "CloudFront uses HTTP internally with ALB. Security handled by CloudFront HTTPS and origin verification. Consider end-to-end HTTPS if required."
+          - id: AwsSolutions-CFR5
+            reason: "Origin uses HTTP within AWS network. Consider end-to-end HTTPS if certificate management overhead is acceptable."
+          - id: CKV_AWS_174
+            reason: "Using CloudFront default certificate with TLS 1.2. Consider custom certificate if custom domain required."
+          - id: AwsSolutions-CFR2
+            reason: "Security handled by CloudFront origin header, IP restrictions and ALB rules. WAF needs us-east-1 deployment. Consider using StackSets for WAF if required"
+          - id: CKV_AWS_68
+            reason: "Security handled by CloudFront origin header, IP restrictions and ALB rules. WAF needs us-east-1 deployment. Consider using StackSets for WAF if required"
+          - id: AwsSolutions-CFR1
+            reason: "Geo-restrictions not implemented for flexibility. Consider enabling geo-restrictions if regional compliance or security requirements dictate."
+          - id: W70
+            reason: "CloudFront defaults to TLS 1.2 minimum when using default certificate. Explicit MinimumProtocolVersion not required."
+      checkov:
+        skip:
+          - id: CKV_AWS_174
+            comment: "Using CloudFront default certificate with TLS 1.2. Consider custom certificate if custom domain required."
+          - id: CKV_AWS_68
+            comment: "WAF not implemented for development environment. Security handled through CloudFront origin verification and code-server authentication. Consider WAF for production."
+  cloudfrontsecretheadercodeserver:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub ${PrefixCode}-secret-cloudfrontheader
+      Description: Origin verification header for code-server CloudFront distribution
+      KmsKeyId: !GetAtt kmskey.Arn
+      GenerateSecretString:
+        SecretStringTemplate: '{"HeaderName": "X-Origin-Verify"}'
+        GenerateStringKey: "HeaderValue"
+        PasswordLength: 32
+        ExcludeCharacters: '\[]{}>|*&!%#`@,."$:+=-~^()'''
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-secret-cloudfrontheader
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W77
+            reason: "Secret is a static verification token between CloudFront and ALB. Rotation would require coordinated updates to both services causing downtime. Consider automated rotation if required."
+          - id: AwsSolutions-SMG4
+            reason: "Secret is a static verification token between CloudFront and ALB. Rotation would require coordinated updates to both services causing downtime. Consider automated rotation if required."
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-SMG4
+            reason: "Secret is a static verification token between CloudFront and ALB. Rotation would require coordinated updates to both services causing downtime. Consider automated rotation if required."
+  securitygroupcodeserver:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${PrefixCode}-securitygroup-app
+      GroupDescription: code-server security group
+      VpcId: !Ref vpc01
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-securitygroup-app
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W40
+            reason: "Egress rules defined separately with proper justifications for VPC-scoped access"
+          - id: W5
+            reason: "Egress rules defined separately with proper justifications for internet access"
+          - id: W42
+            reason: "Self-referencing ingress rules defined separately with proper justifications"
+          - id: W9
+            reason: "Ingress rules defined separately with proper justifications for CIDR ranges"
+  securitygroupingresscodeserver:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref securitygroupalb
+      Description: Allow inbound from ALB to codeserver
+  securitygroupegresscodeserverhttp:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+      Description: Allow outbound HTTP for package downloads and Git operations
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W5
+            reason: "Development environment requires outbound HTTP access for package downloads and Git operations"
+  securitygroupegresscodeserverhttps:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+      Description: Allow outbound HTTPS for package downloads and Git operations
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W5
+            reason: "Development environment requires outbound HTTPS access for package downloads and Git operations"
+  securitygroupegresscodeserverssh:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      CidrIp: 0.0.0.0/0
+      Description: Allow outbound SSH for Git operations
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W5
+            reason: "Development environment requires outbound SSH access for Git operations"
+  securitygroupegresscodeservervpc:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: -1
+      CidrIp: !Sub ${VpcCidr}.0.0/16
+      Description: Allow all outbound traffic within VPC for AWS service access
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W40
+            reason: "Egress rule allows all protocols within VPC for AWS service access. Scoped to VPC CIDR only, not internet-facing."
+
+  ### Authentication - Secrets Manager storing credentials for code-server access and CloudFront origin verification
+  secretcodeserver:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub ${PrefixCode}-secret-codeserver
+      Description: Initial code-server password. If rotation enabled, refer to the rotating secret after 30 days.
+      KmsKeyId: !GetAtt kmskey.Arn
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: "password"
+        PasswordLength: 16
+        ExcludeCharacters: '\[]{}>|*&!%#`@,."$:+=-~^()'''
+        RequireEachIncludedType: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-secret-codeserver
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-SMG4
+            reason: "This is the initial deployment secret only. For automated rotation, enable the RotateSecret parameter which creates and uses secretcodeserverrotating instead."
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-SMG4
+            reason: "This is the initial deployment secret only. For automated rotation, enable the RotateSecret parameter which creates and uses secretcodeserverrotating instead."
+
+  ### Source Control Storage - S3 bucket configured as a git remote for version control, acting as a serverless git repository with encryption and access controls
+  s3bucketgit:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !Ref kmskeyalias
+              SSEAlgorithm: aws:kms
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref s3bucketlogs
+        LogFilePrefix: s3-logs/git/
+      # Required for pipeline build
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      Tags:
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: storage
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  s3bucketpolicygit:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref s3bucketgit
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: EnforceSecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+
+  ### Development Environment - EC2 instance running code-server with developer tools and git integration
+  iamrolecodeserver:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PrefixCode}-iamrole-codeserver
+      Description: Code-server EC2 Instance Profile
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-EC2
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeTags
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:SourceAccount: !Ref AWS::AccountId
+        # https://docs.aws.amazon.com/systems-manager/latest/userguide/security_iam_service-with-iam.html
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-codeserver-SystemsManager
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:StartSession
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:*
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-StartPortForwardingSession
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-codeserver-CloudWatch
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/ec2/${PrefixCode}-codeserver
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/ec2/${PrefixCode}-codeserver:*
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-codeserver-KMS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                  - kms:GenerateDataKey
+                Resource:
+                  - !GetAtt kmskey.Arn
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-codeserver-secretsmanager
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource:
+                  - !Ref secretcodeserver
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-codeserver-S3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource: 
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}/*
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketwildlife}/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: 
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketwildlife}
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-codeserver-SSM
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${PrefixCode}/config/AmazonCloudWatch-linux
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iamrole-codeserver
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W11
+            reason: "EC2 instance requires describe permissions and CloudWatch Logs access. Access limited by SourceAccount condition and scoped resources."
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-IAM5
+            reason: "EC2 instance requires describe permissions. Access limited by SourceAccount condition, specific actions, and scoped resources for S3, KMS, and Secrets Manager."
+  iaminstanceprofilecodeserver:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${PrefixCode}-iamprofile-ec2admin
+      Roles:
+        - !Ref iamrolecodeserver
+  # EC2 keypair is automatically stored in AWS Systems Manager Parameter Store
+  ec2keypaircodeserver:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Sub ${PrefixCode}-ec2-keypair
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-ec2-keypair
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  ec2loggroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/ec2/${PrefixCode}-codeserver
+      RetentionInDays: 14
+      KmsKeyId: !GetAtt kmskey.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-ec2loggroup
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: monitoring
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  ssmparametercloudwatchlinux:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${PrefixCode}/config/AmazonCloudWatch-linux
+      Type: String
+      Value: !Sub |
+        {
+          "logs": {
+            "logs_collected": {
+              "files": {
+                "collect_list": [
+                  {
+                    "file_path": "/var/log/cloud-init-output.log",
+                    "log_group_name": "/aws/ec2/${PrefixCode}-codeserver",
+                    "log_stream_name": "setup"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      Description: CloudWatch Agent configuration for linux instances
+      Tags:
+        Name: !Sub ${PrefixCode}-ssm-cloudwatch-linux
+        provisioner: CFN
+        solution: !Sub ${SolutionTag}
+        resourcetype: monitoring
+        environment: !Sub ${EnvironmentTag}
+  ec2codeserver:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !If [IsArm64, !Ref AMIArmCodeServer, !Ref AMIx86CodeServer]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref ec2keypaircodeserver
+      SubnetId: !Ref subnetprivate01
+      IamInstanceProfile: !Ref iaminstanceprofilecodeserver
+      Monitoring: true
+      PrivateIpAddress: !Sub ${VpcCidr}.3.100
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            # Consider setting DeleteOnTermination to false in your own environments
+            DeleteOnTermination: true
+            Encrypted: true
+            KmsKeyId: alias/aws/ebs
+            VolumeSize: 100
+            VolumeType: gp3
+            Iops: 3000
+      SecurityGroupIds:
+        - !Ref securitygroupcodeserver
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # This script sets up a persistent boot script using cloud-init
+
+          echo "INFO: Starting bootstrap process at $(date)"
+
+          # Define all variables
+          ENV_FILE="/etc/devbox-env.sh" # Environment variables file
+          STATUS_FILE="/var/lib/cloud/instance/setup-status.log" # Installation status tracking file
+          GITHUB_RAW_URL="https://raw.githubusercontent.com/aws-samples/sample-101-containers-workshop/refs/heads/main/workshop/devbox-setup.sh" # URL to download setup script
+          SETUP_SCRIPT="/var/lib/cloud/scripts/per-boot/setup.sh" # Location of the setup script (runs on every boot)
+          SETUP_LOG="/var/log/devbox-setup.log" # Log file for setup script output
+
+          # Create environment file with all necessary variables
+          cat > $ENV_FILE << EOF
+          # Environment variables for setup
+
+          # Package version variables
+          export BOTO3_VERSION="1.37.18"
+          export UV_PYTHON_VERSION="3.13"
+          export MCP_PYTHON_VERSION="3.13"
+          export UV_VERSION="latest"
+          # might not need below line
+          export UVENV_VERSION="latest"
+          export GIT_REMOTE_S3_VERSION="latest"
+          export DOTNET_VERSION="8.0"
+          export MONGODB_VERSION="8.0"
+          export K6_VERSION="0.57.0"
+
+          # Variables from CloudFormation template
+          export AWS_ACCOUNT_ID="${AWS::AccountId}"
+          export AWS_REGION="${AWS::Region}"
+          export PREFIX_CODE="${PrefixCode}"
+          export VPC_ID="${vpc01}"
+          export PRIVATE_SUBNET_1="${subnetprivate01}"
+          export PRIVATE_SUBNET_2="${subnetprivate02}"
+          export PUBLIC_SUBNET_1="${subnetpublic01}"
+          export PUBLIC_SUBNET_2="${subnetpublic02}"
+          export SECURITY_GROUP_APP="${securitygroupcodeserver}"
+          export SECURITY_GROUP_ALB="${securitygroupalb}"
+          export S3_BUCKET_GIT="${s3bucketgit}"
+          export S3_BUCKET_LOGS="${s3bucketlogs}"
+          export INSTANCE_ARCHITECTURE="${InstanceArchitecture}"
+          export CODE_SERVER_VERSION="${CodeServerVersion}"
+          export GITHUB_REPO="${GitHubRepo}"
+          export AUTO_SET_DEVELOPER_PROFILE="${AutoSetDeveloperProfile}"
+          export S3_ASSET_BUCKET="${S3AssetBucket}"
+          export S3_ASSET_PREFIX="${S3AssetPrefix}"
+          export SECRET_CODE_SERVER="${secretcodeserver}"
+          export INSTALL_DOTNET="${InstallDotNet}"
+          export S3_BUCKET_WILDLIFE="${s3bucketwildlife}"
+          export CLOUDFRONT_DISTRIBUTION_ID="${cloudfrontdistributioncodeserver}"
+          export S3_BUCKET_ARTIFACT="${s3bucketartifact}"
+          export CODE_SERVER_ALB=$(echo "${albcodeserver}" | cut -d'/' -f3)
+          EOF
+
+          # Make it readable by everyone but only writable by root
+          chmod 644 $ENV_FILE
+
+          # Wait for SSM agent initialization
+          echo "INFO: Waiting for SSM agent initialization..."
+          until systemctl is-active --quiet amazon-ssm-agent; do
+            echo "INFO: SSM agent is not ready..."
+            systemctl status amazon-ssm-agent
+            sleep 5
+          done
+
+          # Initialize status tracking file
+          touch $STATUS_FILE
+
+          # Download the setup script from GitHub and place it in per-boot directory
+          echo "INFO: Downloading setup script from GitHub"
+          curl -s -o $SETUP_SCRIPT $GITHUB_RAW_URL
+          chmod +x $SETUP_SCRIPT
+
+          # Run the setup script for the first time
+          echo "INFO: Running initial setup"
+          source $ENV_FILE
+          $SETUP_SCRIPT
+          SETUP_EXIT_CODE=$?
+
+          # Report setup status
+          if [ $SETUP_EXIT_CODE -eq 0 ]; then
+            echo "INFO: Setup completed successfully"
+          else
+            echo "ERROR: Setup failed with exit code $SETUP_EXIT_CODE"
+            echo "ERROR: Check $STATUS_FILE for details"
+          fi
+
+          # Failsafe command
+          echo ""
+          echo "=================================================================="
+          echo "FAILSAFE COMMAND:"
+          echo "To manually download and run the latest setup script, execute:"
+          echo "sudo bash -c 'curl -s https://raw.githubusercontent.com/aws-samples/sample-101-containers-workshop/refs/heads/main/workshop/devbox-setup.sh -o /tmp/setup.sh && chmod +x /tmp/setup.sh && source /etc/devbox-env.sh && /tmp/setup.sh'"                 GITHUB_RAW_URL="https://raw.githubusercontent.com/aws-samples/sample-101-containers-workshop/refs/heads/main/workshop/devbox-setup.sh" # URL to download setup script
+          echo "=================================================================="
+          echo ""
+
+          # Display important file locations
+          echo "INFO: Important file locations:"
+          echo "- Environment file: $ENV_FILE"
+          echo "- Setup script: $SETUP_SCRIPT"
+          echo "- Status file: $STATUS_FILE"
+          echo "- Setup log: $SETUP_LOG"
+
+          echo "INFO: Bootstrap process completed at $(date)"
+          /opt/aws/bin/cfn-signal -e $SETUP_EXIT_CODE --stack ${AWS::StackName} --region ${AWS::Region} --resource=ec2codeserver
+          exit $SETUP_EXIT_CODE
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-ec2-codeserver
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: compute
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+    Metadata:
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-EC29
+            reason: "Development instance uses S3 for code and state persistence. Consider ASG implementation if high availability required."
+
+  ### IMPORTANT: Developer role with elevated permissions used by both code-server AWS profile and CodeBuild pipeline to deploy sample project [static website hosted on Amazon S3] - review and adjust based on requirements
+  iamroledeveloper:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PrefixCode}-iamrole-developer
+      Description: Elevated permissions for AWS infrastructure deployment and resource management
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+                - ec2.amazonaws.com
+              AWS: !GetAtt iamrolecodeserver.Arn
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-gitpush-KMS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                  - kms:GenerateDataKey
+                Resource:
+                  - !GetAtt kmskey.Arn
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-terraform-s3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                Resource: 
+                  - "*"
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource: 
+                  - !Sub arn:${AWS::Partition}:s3:::${PrefixCode}-*
+                  - !Sub arn:${AWS::Partition}:s3:::${PrefixCode}-*/*
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketwildlife}
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketwildlife}/*
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-ec2codebuild
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeInstances # test aws cli commands
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeVpcs
+                  - ec2:DeleteNetworkInterface
+                  - ec2:CreateNetworkInterface
+                Resource: "*"
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-ecs-passrole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !GetAtt iamroleecstask.Arn
+                  - !GetAtt iamroleecstaskexecution.Arn
+      ManagedPolicyArns:
+        - !Ref iampolicymanagedcontainer
+        - !Ref iampolicymanagedinfrastructure1
+        - !Ref iampolicymanagedinfrastructure2
+        - !Ref iampolicymanagedservices
+        - !Ref iampolicymanagedapplicationdata
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iamrole-developer
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-IAM5
+            reason: "Role scoped to prefix-matched S3 buckets and account-specific resources. Wildcard required for EC2/CodeBuild networking. Consider further restrictions if required."
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W11
+            reason: "s3:ListAllMyBuckets is an account-level operation that requires * resource per AWS documentation"
+          - id: F3
+            reason: "Developer role requires broad permissions for infrastructure deployment. Scoped to specific resources and account. Consider further restrictions if required."
+  # Policy allowing code-server user to assume the developer role
+  iamrolepolicyassumedeveloper:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${PrefixCode}-iampolicy-assume-Developer
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Resource: !GetAtt iamroledeveloper.Arn
+      Roles:
+        - !Ref iamrolecodeserver
+  # Policy allowing code-server to copy files from source S3 bucket for workspace initialization
+  iampolicyS3Assets:
+    Type: AWS::IAM::RolePolicy
+    Condition: HasS3Assets
+    Properties:
+      RoleName: !Ref iamrolecodeserver
+      PolicyName: !Sub ${PrefixCode}-iampolicy-s3-assets
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: s3:ListAllMyBuckets
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${S3AssetBucket}
+              - !Sub arn:${AWS::Partition}:s3:::${S3AssetBucket}/${S3AssetPrefix}*
+
+  ### CI/CD - CodeBuild and CodePipeline for automated infrastructure deployment via Terraform
+  # S3 bucket for codepipeline artifacts AND TERRAFORM STATE!
+  s3bucketartifact:
+    Type: AWS::S3::Bucket
+    Condition: CreatePipeline
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !Ref kmskeyalias
+              SSEAlgorithm: aws:kms
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref s3bucketlogs
+        LogFilePrefix: s3-logs/pipeline/
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: storage
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  s3bucketpolicyartifact:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreatePipeline
+    Properties:
+      Bucket: !Ref s3bucketartifact
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: EnforceSecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+  # Pipeline-specific permissions for iamroledeveloper conditional on DeployPipeline
+  iamroledeveloperpipeline:
+    Type: AWS::IAM::RolePolicy
+    Condition: CreatePipeline
+    Properties:
+      RoleName: !Ref iamroledeveloper
+      PolicyName: !Sub ${PrefixCode}-iampolicy-pipeline
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:GetBucketVersioning
+              - s3:PutObjectVersionAcl
+              - s3:GetObjectVersionAcl
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}/*
+          - Effect: Allow
+            Action: ec2:CreateNetworkInterfacePermission
+            Resource: !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+            Condition:
+              StringEquals:
+                ec2:AuthorizedService: codebuild.amazonaws.com
+              ArnEquals:
+                ec2:Subnet:
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${subnetprivate01}
+  # Terraform apply CodeBuild Project
+  codebuildprojectbuild:
+    Type: AWS::CodeBuild::Project
+    Condition: CreatePipeline
+    Properties:
+      Name: !Sub ${PrefixCode}-codebuildproject-terraform-build
+      Description: Deploy Terraform-managed resources (automatically triggered)
+      EncryptionKey: !GetAtt kmskey.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        PrivilegedMode: false
+        Type: LINUX_CONTAINER
+      ServiceRole: !GetAtt iamroledeveloper.Arn
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: !Sub |
+          version: 0.2
+          phases:
+            install:
+              commands:
+                # Install Terraform latest version
+                - yum install -y yum-utils
+                - yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+                - yum -y install terraform
+                - terraform --version
+            pre_build:
+              commands:
+                # Initialize Terraform using shared pipeline/state bucket
+                - cd terraform-live
+                - terraform init -backend-config="bucket=${s3bucketartifact}" -backend-config="region=${AWS::Region}"
+            build:
+              commands:
+                # Pass region and prefix to Terraform to ensure created resources match IAM permissions and naming convention
+                - terraform plan
+                - terraform apply -auto-approve
+            post_build:
+              commands:
+                - echo "Terraform apply completed on $(date)"
+                - echo "Website URL -> $(terraform output -raw application_url)"
+                - echo "WEBSITE_URL=$(terraform output -raw application_url)" >> $CODEBUILD_SRC_DIR/variables.env
+              exported-variables:
+                - WEBSITE_URL
+      TimeoutInMinutes: 30
+      VpcConfig:
+        VpcId: !Ref vpc01
+        Subnets:
+          - !Ref subnetprivate01
+        SecurityGroupIds:
+          - !Ref securitygroupcodeserver
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-codebuildproject-terraform-build
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: devops
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  # Terraform destroy CodeBuild Project
+  codebuildprojectdestroy:
+    Type: AWS::CodeBuild::Project
+    Condition: CreatePipeline
+    Properties:
+      Name: !Sub ${PrefixCode}-codebuildproject-terraform-destroy
+      Description: Destroys Terraform-managed resources (manual trigger only)
+      EncryptionKey: !GetAtt kmskey.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        PrivilegedMode: false
+        Type: LINUX_CONTAINER
+      ServiceRole: !GetAtt iamroledeveloper.Arn
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: !Sub |
+          version: 0.2
+          phases:
+            install:
+              commands:
+                # Install Terraform latest version
+                - yum install -y yum-utils
+                - yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+                - yum -y install terraform
+                - terraform --version
+            pre_build:
+              commands:
+                # Initialize Terraform using shared pipeline/state bucket
+                - cd terraform-live
+                - terraform init -backend-config="bucket=${s3bucketartifact}" -backend-config="region=${AWS::Region}"
+            build:
+              commands:
+                # Pass same variables as deploy
+                - terraform destroy -auto-approve
+            post_build:
+              commands:
+                - echo "Terraform destroy completed on $(date)"
+      TimeoutInMinutes: 30
+      VpcConfig:
+        VpcId: !Ref vpc01
+        Subnets:
+          - !Ref subnetprivate01
+        SecurityGroupIds:
+          - !Ref securitygroupcodeserver
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-codebuildproject-terraform-destroy
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: devops
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  iamrolepipeline:
+    Type: AWS::IAM::Role
+    Condition: CreatePipeline
+    Properties:
+      RoleName: !Sub ${PrefixCode}-iamrole-pipeline
+      Description: Code pipeline access to S3
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-pipeline-codebuild
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                  - codebuild:StopBuild
+                Resource:
+                  - !GetAtt codebuildprojectbuild.Arn
+                  - !GetAtt codebuildprojectdestroy.Arn
+        - PolicyName: !Sub ${PrefixCode}-pipeline-s3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:PutObject
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}/*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+                  - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}
+        - PolicyName: !Sub ${PrefixCode}-pipeline-kms
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                  - kms:Encrypt
+                  - kms:GenerateDataKey
+                  - kms:ReEncrypt*
+                Resource: !GetAtt kmskey.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iamrole-pipeline
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: AwsSolutions-IAM5
+            reason: "Pipeline role policies scoped to specific resources. Wildcards required for S3 object access and KMS operations."
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-IAM5
+            appliesTo:
+              - "Resource::arn:<AWS::Partition>:s3:::<s3bucketgit>/*"
+              - "Resource::arn:<AWS::Partition>:s3:::<s3bucketartifact>/*"
+              - "Action::kms:ReEncrypt*"
+            reason: "Pipeline role requires S3 object-level and KMS permissions. Access scoped to specific buckets and KMS key."
+  # Terraform apply pipeline
+  pipelinebuild:
+    Type: AWS::CodePipeline::Pipeline
+    Condition: CreatePipeline
+    Properties:
+      Name: !Sub ${PrefixCode}-pipeline-terraform-build
+      RoleArn: !GetAtt iamrolepipeline.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref s3bucketartifact
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: 1
+                Provider: S3
+              Configuration:
+                S3Bucket: !Ref s3bucketgit
+                S3ObjectKey: my-workspace/refs/heads/main/repo.zip
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: SourceCode
+              RunOrder: 1
+              Region: !Ref AWS::Region
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref codebuildprojectbuild
+              InputArtifacts:
+                - Name: SourceCode
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+              Region: !Ref AWS::Region
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-pipeline-terraform-build
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: devops
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  # Terraform destroy pipeline
+  pipelinedestroy:
+    Type: AWS::CodePipeline::Pipeline
+    Condition: CreatePipeline
+    Properties:
+      Name: !Sub ${PrefixCode}-pipeline-terraform-destroy
+      RoleArn: !GetAtt iamrolepipeline.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref s3bucketartifact
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: 1
+                Provider: S3
+              Configuration:
+                S3Bucket: !Ref s3bucketgit
+                S3ObjectKey: my-workspace/refs/heads/main/repo.zip
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: SourceCode
+              RunOrder: 1
+              Region: !Ref AWS::Region
+        - Name: Approve
+          Actions:
+            - Name: ApproveDestroy
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Version: 1
+                Provider: Manual
+              Configuration:
+                CustomData: "WARNING: This will destroy all Terraform-managed resources. Are you sure?"
+              RunOrder: 1
+        - Name: Destroy
+          Actions:
+            - Name: Destroy
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref codebuildprojectdestroy
+              InputArtifacts:
+                - Name: SourceCode
+              RunOrder: 1
+              Region: !Ref AWS::Region
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-pipeline-terraform-destroy
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: devops
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  # Trigger code pipeline on S3 event
+  iamroleeventbridge:
+    Type: AWS::IAM::Role
+    Condition: CreatePipeline
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-InvokePipeline
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: codepipeline:StartPipelineExecution
+                Resource: !Sub arn:${AWS::Partition}:codepipeline:${AWS::Region}:${AWS::AccountId}:${pipelinebuild}
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-WriteToCloudWatch
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/events/${PrefixCode}-pipeline-trigger:*
+    Metadata:
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-IAM5
+            reason: "Wildcard required for log stream access. Permission scoped to single log group. Consider removal if pipeline logging not required."
+  eventbridgeloggroup:
+    Type: AWS::Logs::LogGroup
+    Condition: CreatePipeline
+    Properties:
+      LogGroupName: !Sub /aws/codepipeline/${PrefixCode}-pipeline
+      RetentionInDays: 14
+      KmsKeyId: !GetAtt kmskey.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-pipelineloggroup
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: monitoring
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  eventbridgetriggerrule:
+    Type: AWS::Events::Rule
+    Condition: CreatePipeline
+    Properties:
+      Name: !Sub ${PrefixCode}-pipeline-trigger
+      EventBusName: default
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref s3bucketgit
+          object:
+            key:
+              - my-workspace/refs/heads/main/repo.zip
+      State: ENABLED
+      Targets:
+        - Arn: !Sub arn:${AWS::Partition}:codepipeline:${AWS::Region}:${AWS::AccountId}:${pipelinebuild}
+          Id: CodePipelineTarget
+          RoleArn: !GetAtt iamroleeventbridge.Arn
+
+  ### Lambda-based rotation of code-server password
+  secretcodeserverrotating:
+    Type: AWS::SecretsManager::Secret
+    Condition: EnableRotation
+    Properties:
+      Name: !Sub ${PrefixCode}-secret-rotating-codeserver
+      Description: Rotating code-server password that updates automatically every 30 days. This replaces the initial secret after first rotation.
+      KmsKeyId: !GetAtt kmskey.Arn
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: "password"
+        PasswordLength: 16
+        ExcludeCharacters: '\[]{}>|*&!%#`@,."$:+=-~^()'''
+        RequireEachIncludedType: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-secret-rotating-codeserver
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  secretcodeserverrotationschedule:
+    Type: AWS::SecretsManager::RotationSchedule
+    DependsOn: lambdasecretrotationpermission
+    Condition: EnableRotation
+    Properties:
+      SecretId: !Ref secretcodeserverrotating
+      RotationLambdaARN: !GetAtt lambdasecretrotation.Arn
+      RotationRules:
+        AutomaticallyAfterDays: 30
+      RotateImmediatelyOnUpdate: false
+  lambdasecretrotation:
+    # https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_lambda-functions.html
+    Type: AWS::Lambda::Function
+    Condition: EnableRotation
+    Properties:
+      Description: Lambda function to rotate code-server password
+      FunctionName: !Sub ${PrefixCode}-lambda-rotation-codeserver
+      Handler: index.lambda_handler
+      KmsKeyArn: !GetAtt kmskey.Arn
+      Runtime: python3.12
+      Timeout: 300
+      MemorySize: 128
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt iamrolelambda.Arn
+      Environment:
+        Variables:
+          INSTANCE_ID: !Ref ec2codeserver
+          SECRETS_MANAGER_ENDPOINT: !Sub https://secretsmanager.${AWS::Region}.amazonaws.com
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+          # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+          # software and associated documentation files (the "Software"), to deal in the Software
+          # without restriction, including without limitation the rights to use, copy, modify,
+          # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+          # permit persons to whom the Software is furnished to do so.
+          #
+          # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+          # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+          # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+          # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+          # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+          # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+          import boto3
+          import json
+          import logging
+          import os
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def lambda_handler(event, context):
+              arn = event['SecretId']
+              token = event['ClientRequestToken']  # checkov:skip=CKV_SECRET_6 AWS Secrets Manager rotation token from event
+              step = event['Step']
+
+              # Setup the client
+              service_client = boto3.client('secretsmanager', endpoint_url=os.environ['SECRETS_MANAGER_ENDPOINT'])
+
+              # Make sure the version is staged correctly
+              metadata = service_client.describe_secret(SecretId=arn)
+              if not metadata['RotationEnabled']:
+                  logger.error("Secret %s is not enabled for rotation" % arn)
+                  raise ValueError("Secret %s is not enabled for rotation" % arn)
+              versions = metadata['VersionIdsToStages']
+              if token not in versions:
+                  logger.error("Secret version %s has no stage for rotation of secret %s." % (token, arn))
+                  raise ValueError("Secret version %s has no stage for rotation of secret %s." % (token, arn))
+              if "AWSCURRENT" in versions[token]:
+                  logger.info("Secret version %s already set as AWSCURRENT for secret %s." % (token, arn))
+                  return
+              elif "AWSPENDING" not in versions[token]:
+                  logger.error("Secret version %s not set as AWSPENDING for rotation of secret %s." % (token, arn))
+                  raise ValueError("Secret version %s not set as AWSPENDING for rotation of secret %s." % (token, arn))
+
+              if step == "createSecret":
+                  create_secret(service_client, arn, token)
+              elif step == "setSecret":
+                  set_secret(service_client, arn, token)
+              elif step == "testSecret":
+                  test_secret(service_client, arn, token)
+              elif step == "finishSecret":
+                  finish_secret(service_client, arn, token)
+              else:
+                  raise ValueError("Invalid step parameter")
+
+          def create_secret(service_client, arn, token):
+              """Create the secret"""
+              # Get current secret to keep username
+              current_secret = service_client.get_secret_value(
+                  SecretId=arn,
+                  VersionStage="AWSCURRENT"
+              )
+              current_dict = json.loads(current_secret['SecretString'])
+
+              # Generate new password using same rules as original secret
+              passwd = service_client.get_random_password(
+                  ExcludeCharacters='\[]{}>|*&!%#`@,."$:+=-~^()',
+                  PasswordLength=16,
+                  RequireEachIncludedType=True
+              )
+
+              # Create new secret with existing username and new password
+              new_secret = {
+                  'username': current_dict['username'],
+                  'password': passwd['RandomPassword']  # checkov:skip=CKV_SECRET_6 Generated password from AWS Secrets Manager
+              }
+
+              # Put the secret
+              service_client.put_secret_value(
+                  SecretId=arn,
+                  ClientRequestToken=token,
+                  SecretString=json.dumps(new_secret),
+                  VersionStages=['AWSPENDING']
+              )
+              logger.info(f"createSecret: Successfully put secret for ARN {arn} and version {token}")
+
+          def set_secret(service_client, arn, token):
+              """Set the secret in code-server"""
+              # Get the pending secret
+              pending_secret = service_client.get_secret_value(
+                  SecretId=arn,
+                  VersionStage="AWSPENDING"
+              )
+              pending_dict = json.loads(pending_secret['SecretString'])
+
+              # Use SSM to update code-server config
+              ssm = boto3.client('ssm')
+              instance_id = os.environ['INSTANCE_ID']
+
+              response = ssm.send_command(
+                  InstanceIds=[instance_id],
+                  DocumentName='AWS-RunShellScript',
+                  Parameters={
+                      'commands': [
+                          'cat > /home/ec2-user/.config/code-server/config.yaml << EOL\n'
+                          'bind-addr: 0.0.0.0:8080\n'
+                          'auth: password\n'
+                          f'password: {pending_dict["password"]}\n'
+                          'cert: false\n'
+                          'EOL',
+                          'systemctl restart code-server'
+                      ]
+                  }
+              )
+              logger.info(f"setSecret: Updated code-server config for instance {instance_id}")
+
+          def test_secret(service_client, arn, token):
+              """Test the secret"""
+              # Check if code-server service is running
+              ssm = boto3.client('ssm')
+              instance_id = os.environ['INSTANCE_ID']
+
+              response = ssm.send_command(
+                  InstanceIds=[instance_id],
+                  DocumentName='AWS-RunShellScript',
+                  Parameters={
+                      'commands': ['systemctl is-active code-server']
+                  }
+              )
+              logger.info(f"testSecret: Verified code-server is running on {instance_id}")
+
+          def finish_secret(service_client, arn, token):
+              """Finish the secret"""
+              # First describe the secret to get the current version
+              metadata = service_client.describe_secret(SecretId=arn)
+              current_version = None
+              for version in metadata["VersionIdsToStages"]:
+                  if "AWSCURRENT" in metadata["VersionIdsToStages"][version]:
+                      if version == token:
+                          # The correct version is already marked as current, return
+                          logger.info("finishSecret: Version %s already marked as AWSCURRENT for %s" % (version, arn))
+                          return
+                      current_version = version
+                      break
+
+              # Finalize by staging the secret version current
+              service_client.update_secret_version_stage(
+                  SecretId=arn,
+                  VersionStage="AWSPENDING",
+                  RemoveFromVersionId=token
+              )
+              service_client.update_secret_version_stage(
+                  SecretId=arn,
+                  VersionStage="AWSCURRENT",
+                  MoveToVersionId=token,
+                  RemoveFromVersionId=current_version
+              )
+              logger.info("finishSecret: Successfully set AWSCURRENT stage to version %s for secret %s." % (token, arn))
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-lambda-rotation-codeserver
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: compute
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Lambda function has CloudWatch Logs permissions in attached IAM role inline policy"
+          - id: W89
+            reason: "Lambda function requires internet access for AWS APIs and doesn't access VPC resources"
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-L1
+            reason: "Using latest supported Python runtime (3.12). Will be updated when new versions are available."
+  lambdasecretrotationpermission:
+    Type: AWS::Lambda::Permission
+    Condition: EnableRotation
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref lambdasecretrotation
+      Principal: secretsmanager.amazonaws.com
+  iamrolelambda:
+    Type: AWS::IAM::Role
+    Condition: EnableRotation
+    Properties:
+      RoleName: !Sub ${PrefixCode}-role-secretrotation-codeserver
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-role-secretrotation-codeserver
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+  iamrolepolicylambdarotation:
+    Type: AWS::IAM::Policy
+    Condition: EnableRotation
+    Properties:
+      PolicyName: !Sub ${PrefixCode}-iampolicy-rotation-secret-access
+      Roles:
+        - !Ref iamrolelambda
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${PrefixCode}-lambda-rotation-codeserver:*
+          - Effect: Allow
+            Action:
+              - secretsmanager:DescribeSecret
+              - secretsmanager:GetSecretValue
+              - secretsmanager:PutSecretValue
+              - secretsmanager:UpdateSecretVersionStage
+            Resource: !Ref secretcodeserverrotating
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetRandomPassword
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:GenerateDataKey
+            Resource: !GetAtt kmskey.Arn
+            Condition:
+              StringEquals:
+                kms:EncryptionContext:SecretARN: !Ref secretcodeserverrotating
+          - Effect: Allow
+            Action:
+              - ssm:SendCommand
+              - ssm:GetCommandInvocation
+            Resource:
+              - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${ec2codeserver}
+              - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:*:document/AWS-RunShellScript
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W12
+            reason: "secretsmanager:GetRandomPassword is a service-level operation that requires * resource per AWS documentation. AWS-managed SSM document uses * for account ID as it's available across all accounts"
+          - id: AwsSolutions-IAM5
+            reason: Lambda rotation role requires CloudWatch Logs and SSM document access. Wildcards scoped to specific log groups and SSM RunShellScript document.  Refer to https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets-required-permissions-function.html
+      cdk_nag:
+        rules_to_suppress:
+          - id: AwsSolutions-IAM5
+            appliesTo:
+              - "Resource::arn:<AWS::Partition>:logs:<AWS::Region>:<AWS::AccountId>:log-group:/aws/lambda/<PrefixCode>-lambda-rotation-codeserver:*"
+              - "Resource::*"
+              - "Resource::arn:<AWS::Partition>:ssm:<AWS::Region>:*:document/AWS-RunShellScript"
+            reason: "Lambda requires CloudWatch Logs access and SSM RunShellScript document permissions. GetRandomPassword requires * resource."
+
+  ### Workshop pre-created resources
+###IAMPOLICYSTART
+  # ECS Task Execution role
+  iamroleecstaskexecution:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PrefixCode}-iamrole-ecs-task-execution
+      Description: ECS task execution role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-ecr
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # https://docs.aws.amazon.com/AmazonECR/latest/userguide/security_iam_id-based-policy-examples.html
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html#task-execution-ecr-conditionkeys
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: "*"
+                Condition:
+                  StringLike:
+                    aws:sourceVpce: "vpce-*"
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-logs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/instance_IAM_role.html#cwl_iam_policy
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: arn:aws:logs:*:*:*
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iamrole-ecs-task-execution
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W11
+            reason: "ECS task execution role requires * resource for CloudWatch Logs and ECR operations per AWS documentation"
+
+ # ECS Task role
+  iamroleecstask:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PrefixCode}-iamrole-ecs-task
+      Description: ECS task role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-ecsexec
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Resource: "*"
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-xray
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                  - xray:GetSamplingRules
+                  - xray:GetSamplingTargets
+                  - xray:GetSamplingStatisticSummaries
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iamrole-ecs-task
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W11
+            reason: "SSM Messages actions are session-level operations required for ECS Exec that cannot be restricted to specific resources. X-Ray actions are service-level operations for distributed tracing that require * resource per AWS documentation"
+
+  # S3 Bucket for wildlife images
+  s3bucketwildlife:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !Ref kmskeyalias
+              SSEAlgorithm: aws:kms
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref s3bucketlogs
+        LogFilePrefix: s3-logs/wildlife/
+      Tags:
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: storage
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  s3bucketpolicywildlife:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref s3bucketwildlife
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: EnforceSecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketwildlife}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketwildlife}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+
+  # Additional VPC configuration
+  subnetprivate02:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref vpc01
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Sub ${VpcCidr}.4.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-subnet-private02-AvailabilityZone02
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  elasticip02:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-eip-AvailabilityZone02
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  natgateway02:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt elasticip02.AllocationId
+      SubnetId: !Ref subnetpublic02
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-nat-public02-AvailabilityZone02
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    DependsOn: internetgateway
+  routetableprivate02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc01
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-routetable-private2-AvailabilityZone2
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  routeprivate02:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref routetableprivate02
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !GetAtt natgateway02.NatGatewayId
+  routeassociationprivate02:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subnetprivate02
+      RouteTableId: !Ref routetableprivate02
+
+  # VPC endpoint for Amazon S3 buckets
+  s3endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action:
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:ListObjectsV2
+              - s3:ListBucketVersions
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:GetBucketLocation
+              - s3:DeleteObjectVersion
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}/*
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketwildlife}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketwildlife}/*
+              - !Sub arn:${AWS::Partition}:s3:::al2023-repos-*
+              - !Sub arn:${AWS::Partition}:s3:::al2023-repos-*/*
+              - !Sub arn:${AWS::Partition}:s3:::amazonlinux-2023-*
+              - !Sub arn:${AWS::Partition}:s3:::amazonlinux-2023-*/*
+              # For ECR over VPC Endpoint
+              - !Sub arn:${AWS::Partition}:s3:::prod-${AWS::Region}-starport-layer-bucket/*
+              # Required for SSM
+              - !Sub arn:${AWS::Partition}:s3:::aws-windows-downloads-${AWS::Region}/*
+              - !Sub arn:${AWS::Partition}:s3:::amazon-ssm-${AWS::Region}/*
+              - !Sub arn:${AWS::Partition}:s3:::aws-ssm-${AWS::Region}/*
+              - !Sub arn:${AWS::Partition}:s3:::patch-baseline-snapshot-${AWS::Region}/*
+              - !Sub arn:${AWS::Partition}:s3:::aws-patch-manager-${AWS::Region}-*/*
+              - !Sub arn:${AWS::Partition}:s3:::aws-patchmanager-macos-${AWS::Region}-*/*
+              # Required for S3 bucket emptying script
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/*
+              - !If
+                - CreatePipeline
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}
+                - !Ref AWS::NoValue
+              - !If
+                - CreatePipeline
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}/*
+                - !Ref AWS::NoValue
+
+      RouteTableIds:
+        - !Ref routetableprivate
+        - !Ref routetableprivate02 
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcId: !Ref vpc01
+      VpcEndpointType: Gateway
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-endpoint-s3
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+
+  # Access Layer - ALB target group and listener for access to wildlife app
+  albtargetgroupwildlife:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: /wildlife/
+      HealthCheckPort: 5000
+      Name: !Sub ${PrefixCode}-targetgroup-ec2
+      Port: 5000
+      Protocol: HTTP
+      TargetType: instance
+      Targets:
+        - Id: !Ref ec2codeserver
+      VpcId: !Ref vpc01
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-targetgroup-ec2
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: network
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+  alblistenerrulewildlife:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref albtargetgroupwildlife
+      Conditions:
+        - Field: http-header
+          HttpHeaderConfig:
+            HttpHeaderName: !Sub "{{resolve:secretsmanager:${cloudfrontsecretheadercodeserver}:SecretString:HeaderName}}"
+            Values:
+              - !Sub "{{resolve:secretsmanager:${cloudfrontsecretheadercodeserver}:SecretString:HeaderValue}}"
+        - Field: path-pattern
+          Values: 
+            - /wildlife*
+      ListenerArn: !Ref alblistenercodeserver
+      Priority: 5
+  securitygrouprulewildlifeec2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: tcp
+      FromPort: 5000
+      ToPort: 5000
+      SourceSecurityGroupId: !Ref securitygroupalb
+      Description: Allow inbound from ALB to Wildlife App
+  securitygrouprulewildlifeecr:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Inbound from ECR over VPC Endpoint
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Sub ${VpcCidr}.0.0/16
+  # Security Group Rule for NAT Gateway 1 EIP
+  securitygrouprulealbnatgateway1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref securitygroupalb
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Sub "${elasticip01}/32"
+      Description: Allow HTTP access from NAT Gateway 1 EIP for load testing
+  # Security Group Rule for NAT Gateway 2 EIP  
+  securitygrouprulealbnatgateway2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref securitygroupalb
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Sub "${elasticip02}/32"
+      Description: Allow HTTP access from NAT Gateway 2 EIP for load testing
+  securitygrouprulewildlifealb:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow ALB to forward traffic to Wildlife App containers
+      GroupId: !Ref securitygroupalb
+      IpProtocol: tcp
+      FromPort: 5000
+      ToPort: 5000
+      DestinationSecurityGroupId: !Ref securitygroupcodeserver
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W9
+            reason: "VPC endpoints created during workshop with dynamic IPs. VPC CIDR required since specific /32 addresses unknown at deployment time."
+
+  # Seed container workload security group rules
+  securitygrouprulewildlifeself:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow all traffic between resources in the same security group
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: -1
+      FromPort: -1
+      ToPort: -1
+      SourceSecurityGroupId: !Ref securitygroupcodeserver
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W42
+            reason: "Self-referencing security group rule allows resources in same SG to communicate. Safe pattern for workshop simplicity."
+  securitygrouprulewildlifemongodb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow MongoDB access within security group
+      GroupId: !Ref securitygroupcodeserver
+      IpProtocol: tcp
+      FromPort: 27017
+      ToPort: 27017
+      SourceSecurityGroupId: !Ref securitygroupcodeserver
+
+  # IAM Role for ECS Container Instances
+  iamroleecs:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PrefixCode}-iamrole-ecs
+      Description: ECS Container Instance Role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-iampolicy-ecs-CloudWatch
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/ecs/*
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/ecs/*:*
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iamrole-ecs
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+
+  # Instance Profile for ECS Container Instances
+  iaminstanceprofileecs:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${PrefixCode}-iamprofile-ecs
+      Roles:
+        - !Ref iamroleecs
+
+  # Log group for Service Connect logs
+  ServiceConnectLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/ecs/service-connect/${PrefixCode}-app
+      RetentionInDays: 14
+      KmsKeyId: !GetAtt kmskey.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-serviceconnectloggroup
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: monitoring
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+
+  # Data Generation Lambda Function
+  lambdagpswildlife:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Lambda function to generate GPS data
+      FunctionName: !Sub ${PrefixCode}-lambda-gps
+      Handler: index.lambda_handler
+      KmsKeyArn: !GetAtt kmskey.Arn
+      Runtime: python3.12
+      Timeout: 300
+      MemorySize: 128
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt iamrolelambdagpswildlife.Arn
+      Environment:
+        Variables:
+          API_ENDPOINT: !Sub https://${cloudfrontdistributioncodeserver.DomainName}/wildlife/api/gps
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+          # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+          # software and associated documentation files (the "Software"), to deal in the Software
+          # without restriction, including without limitation the rights to use, copy, modify,
+          # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+          # permit persons to whom the Software is furnished to do so.
+          #
+          # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+          # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+          # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+          # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+          # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+          # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+          import json
+          import random
+          import boto3
+          import urllib3
+          import os
+          from datetime import datetime
+
+          def generate_gps_point(base_lat, base_lon, radius_km=5):
+              """Generate a random point within radius_km of base point"""
+              # Convert radius from km to degrees (approximate)
+              radius_deg = radius_km / 111
+              
+              new_lat = base_lat + random.uniform(-radius_deg, radius_deg)
+              new_lon = base_lon + random.uniform(-radius_deg, radius_deg)
+              
+              return new_lat, new_lon
+
+          def lambda_handler(event, context):
+              animals = [
+                  {"id": "AF001", "species": "African Lion", "base_lat": -20.2684, "base_lon": 57.4619},         # Black River Gorges
+                  {"id": "AF002", "species": "African Elephant", "base_lat": -20.3189, "base_lon": 57.4397},     # Le Morne
+                  {"id": "AF003", "species": "Black Rhino", "base_lat": -20.3758, "base_lon": 57.5636},          # Bel Ombre
+                  {"id": "AF004", "species": "Giraffe", "base_lat": -20.2198, "base_lon": 57.4716},              # Chamarel
+                  {"id": "AF005", "species": "Cheetah", "base_lat": -20.3487, "base_lon": 57.5903},              # Grand Port
+                  {"id": "AF006", "species": "Zebra", "base_lat": -20.2684, "base_lon": 57.4519},                # Black River
+                  {"id": "AF007", "species": "Hippopotamus", "base_lat": -20.2389, "base_lon": 57.4716},         # Tamarin
+                  {"id": "AF008", "species": "African Buffalo", "base_lat": -20.2198, "base_lon": 57.4916},      # Vacoas
+                  {"id": "AF009", "species": "White Rhino", "base_lat": -20.2684, "base_lon": 57.4719},          # Corps de Garde
+                  {"id": "AF010", "species": "Leopard", "base_lat": -20.3189, "base_lon": 57.4497},              # Baie du Cap
+                  {"id": "AF011", "species": "Greater Kudu", "base_lat": -20.3258, "base_lon": 57.5236},         # Lion Mountain
+                  {"id": "AF012", "species": "Wildebeest", "base_lat": -20.2984, "base_lon": 57.4919},           # Yemen
+                  {"id": "AF013", "species": "Impala", "base_lat": -20.2484, "base_lon": 57.4719},               # Moka
+                  {"id": "AF014", "species": "African Wild Dog", "base_lat": -20.2898, "base_lon": 57.4616},     # Petrin
+                  {"id": "AF015", "species": "Warthog", "base_lat": -20.3158, "base_lon": 57.4736},              # Alexandra Falls
+                  {"id": "AF016", "species": "Sable Antelope", "base_lat": -20.3258, "base_lon": 57.4836},       # Mare Longue
+                  {"id": "AF017", "species": "Gemsbok", "base_lat": -20.3358, "base_lon": 57.4936},              # Grand Bassin
+                  {"id": "AF018", "species": "Eland", "base_lat": -20.3458, "base_lon": 57.5036},                # La Vanille Reserve
+                  {"id": "AF019", "species": "Hyena", "base_lat": -20.3558, "base_lon": 57.5136},                # Rochester Falls
+                  {"id": "AF020", "species": "African Pangolin", "base_lat": -20.2158, "base_lon": 57.4616},     # Pieter Both
+                  {"id": "MU001", "species": "Mauritius Kestrel", "base_lat": -20.2258, "base_lon": 57.4716},    # Le Pouce
+                  {"id": "MU002", "species": "Pink Pigeon", "base_lat": -20.2358, "base_lon": 57.4816},          # Port Louis
+                  {"id": "MU003", "species": "Echo Parakeet", "base_lat": -20.2458, "base_lon": 57.4916},        # Signal Mountain
+                  {"id": "MU004", "species": "Mauritius Fody", "base_lat": -20.2558, "base_lon": 57.5016},       # Long Mountain
+                  {"id": "MU005", "species": "Telfair's Skink", "base_lat": -20.2658, "base_lon": 57.5116}       # Pamplemousses
+              ]
+              
+              api_endpoint = os.environ['API_ENDPOINT']
+              http = urllib3.PoolManager()
+              
+              for animal in animals:
+                  # Generate new position
+                  lat, lon = generate_gps_point(animal["base_lat"], animal["base_lon"])
+                  
+                  # Create GPS data
+                  gps_data = {
+                      "animal_id": animal["id"],
+                      "species": animal["species"],
+                      "latitude": lat,
+                      "longitude": lon,
+                      "battery": random.randint(50, 100),  # Simulate battery level
+                      "timestamp": datetime.utcnow().isoformat()
+                  }
+                  
+                  # Send to API
+                  try:
+                      response = http.request(
+                          'POST',
+                          api_endpoint,
+                          headers={'Content-Type': 'application/json'},
+                          body=json.dumps(gps_data)
+                      )
+                      print(f"Data sent for {animal['id']}: {response.status}")
+                  except Exception as e:
+                      print(f"Error sending data for {animal['id']}: {str(e)}")
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('GPS data generated and sent')
+              }
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-lambda-gps
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: compute
+        - Key: environment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Lambda function has CloudWatch Logs permissions in attached IAM role policy"
+          - id: W89
+            reason: "Lambda function requires internet access for API calls and doesn't access VPC resources"
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: "DLQ not required for workshop demo Lambda function. In production, consider DLQ for error handling and retry logic."
+          - id: CKV_AWS_117
+            comment: "Lambda function only accesses external APIs and doesn't require VPC resources. VPC configuration would add unnecessary cold start delays and NAT Gateway costs. In production, use VPC only when accessing private resources."
+  iamrolelambdagpswildlife:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PrefixCode}-iamrole-gps
+      Description: Lambda permissions for wildlife alerts function
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iamrole-gps
+        - Key: provisioner
+          Value: CFN
+        - Key: solution
+          Value: !Sub ${SolutionTag}
+        - Key: resourcetype
+          Value: security
+        - Key: enviroironment
+          Value: !Sub ${EnvironmentTag}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+  iamrolepolicylambdawildlife:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${PrefixCode}-iampolicy-gps
+      Roles:
+        - !Ref iamrolelambdagpswildlife
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${PrefixCode}-lambda-gps:*
+          - Effect: Allow
+            Action:
+              - execute-api:Invoke
+            Resource: 
+              - !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*
+          - Effect: Allow
+            Action:
+              - xray:PutTraceSegments
+              - xray:PutTelemetryRecords
+            Resource: "*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "execute-api:Invoke and X-Ray actions require * resource per AWS documentation for API Gateway and distributed tracing"
+          - id: W89
+            reason: "Lambda function requires internet access for API calls and doesn't access VPC resources"
+          - id: AwsSolutions-IAM5
+            reason: Lambda requires CloudWatch Logs access, API endpoint access, and X-Ray tracing permissions. Wildcards needed for execute-api invoke and X-Ray trace segments.
+  eventbridgerulegpswildlife:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${PrefixCode}-gps-trigger
+      Description: Triggers wildlife GPS data generator every minute
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt lambdagpswildlife.Arn
+          Id: WildlifeGPSTarget
+  lambdapermissionwildlife:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref lambdagpswildlife
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt eventbridgerulegpswildlife.Arn
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+  # Core Container Services Policy - ECS, ECR, Service Discovery
+  iampolicymanagedcontainer:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${PrefixCode}-iampolicy-container
+      Description: Container services permissions (ECS, ECR, Service Discovery)
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          # ECR - Scoped to wildlife repositories only
+          - Sid: ECRRepositoryManagement
+            Effect: Allow
+            Action:
+              - ecr:CreateRepository
+              - ecr:DeleteRepository
+              - ecr:DescribeRepositories
+              - ecr:BatchCheckLayerAvailability
+              - ecr:CompleteLayerUpload
+              - ecr:InitiateLayerUpload
+              - ecr:PutImage
+              - ecr:UploadLayerPart
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+              - ecr:ListImages
+              - ecr:DescribeImages
+              - ecr:ListTagsForResource
+              - ecr:TagResource
+              - ecr:UntagResource
+              - ecr:PutLifecyclePolicy
+              - ecr:GetLifecyclePolicy
+              - ecr:DeleteLifecyclePolicy
+              - ecr:GetRepositoryPolicy
+              - ecr:BatchDeleteImage
+            Resource:
+              - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/wildlife/*"
+          - Sid: ECRGlobalAccess
+            Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+              - ecr:DescribeRepositories
+              - ecr:ListRepositories
+            Resource: "*"
+          # ECS - Scoped to wildlife resources
+          - Sid: ECSClusterManagement
+            Effect: Allow
+            Action:
+              - ecs:CreateCluster
+              - ecs:DeleteCluster
+              - ecs:DescribeClusters
+              - ecs:PutClusterCapacityProviders
+              - ecs:TagResource
+              - ecs:UntagResource
+              - ecs:ListContainerInstances
+              - ecs:UpdateCluster
+            Resource:
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/wildlife-*"
+          - Sid: ECSCapacityProvider
+            Effect: Allow
+            Action:
+              - ecs:CreateCapacityProvider
+              - ecs:DeleteCapacityProvider
+              - ecs:DescribeCapacityProviders
+              - ecs:TagResource
+              - ecs:UntagResource
+            Resource:
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:capacity-provider/wildlife-*"
+          - Sid: ECSServiceManagement
+            Effect: Allow
+            Action:
+              - ecs:CreateService
+              - ecs:DeleteService
+              - ecs:UpdateService
+              - ecs:DescribeServices
+              - ecs:ListServices
+              - ecs:TagResource
+              - ecs:UntagResource
+            Resource:
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/wildlife-*/*"
+          - Sid: ECSServiceDeployments
+            Effect: Allow
+            Action:
+              - ecs:DescribeServiceDeployments
+              - ecs:ListServiceDeployments
+            Resource:
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/wildlife-*/*"
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service-deployment/wildlife-*/*/*"
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service-revision/wildlife-*/*/*"
+          - Sid: ECSTaskDefinitions
+            Effect: Allow
+            Action:
+              - ecs:RegisterTaskDefinition
+              - ecs:DeregisterTaskDefinition
+              - ecs:ListTaskDefinitionFamilies
+              - ecs:TagResource
+              - ecs:UntagResource
+            Resource:
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/wildlife-*:*"
+          - Sid: ECSTaskManagement
+            Effect: Allow
+            Action:
+              - ecs:ExecuteCommand
+              - ecs:StopTask
+              - ecs:StartTask
+            Resource:
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/wildlife-*"
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task/wildlife-*/*"
+          - Sid: ECSAccountSettings
+            Effect: Allow
+            Action:
+              - ecs:PutAccountSetting
+              - ecs:DescribeTaskDefinition
+              - ecs:ListAccountSettings
+              - ecs:ListTaskDefinitions
+              - ecs:DeregisterTaskDefinition
+              - ecs:ListTasks
+              - ecs:ListClusters
+              - ecs:DescribeTasks
+            Resource: "*"
+
+          # Service Discovery
+          - Sid: ServiceDiscoveryList
+            Effect: Allow
+            Action:
+              - servicediscovery:ListServices
+              - servicediscovery:ListNamespaces
+              - servicediscovery:CreateNamespace
+              - servicediscovery:CreateHttpNamespace
+              - servicediscovery:TagResource
+              - servicediscovery:GetOperation 
+            Resource: "*"
+          - Sid: ServiceDiscoverySpecific
+            Effect: Allow
+            Action:
+              - servicediscovery:CreateService
+              - servicediscovery:DeleteService
+              - servicediscovery:GetService
+              - servicediscovery:UpdateService
+              - servicediscovery:DeleteNamespace
+              - servicediscovery:GetNamespace
+              - servicediscovery:ListTagsForResource
+            Resource:
+              - !Sub "arn:aws:servicediscovery:${AWS::Region}:${AWS::AccountId}:namespace/*"
+              - !Sub "arn:aws:servicediscovery:${AWS::Region}:${AWS::AccountId}:service/*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W13
+            reason: "ECR GetAuthorizationToken and Service Discovery operations require * resource per AWS documentation. Access scoped to account and region."
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "ECR GetAuthorizationToken and Service Discovery operations require * resource per AWS documentation. Access scoped to account and region."
+
+  # Infrastructure Policy (EC2, VPC, Auto Scaling)
+  iampolicymanagedinfrastructure1:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${PrefixCode}-iampolicy-infrastructure-1
+      Description: Infrastructure permissions (EC2, VPC, Auto Scaling)
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          # EC2 - Infrastructure Management
+          - Sid: EC2VPCEndpoints
+            Effect: Allow
+            Action:
+              - ec2:CreateVpcEndpoint
+              - ec2:DeleteVpcEndpoints
+              - ec2:ModifyVpcEndpoint
+            Resource:
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc-endpoint/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:route-table/*"
+          - Sid: EC2LaunchTemplates
+            Effect: Allow
+            Action:
+              - ec2:CreateLaunchTemplate
+              - ec2:CreateLaunchTemplateVersion
+              - ec2:DeleteLaunchTemplate
+              - ec2:DeleteLaunchTemplateVersions
+              - ec2:ModifyLaunchTemplate
+              - ec2:DescribeLaunchTemplates
+              - ec2:DescribeLaunchTemplateVersions
+              - ec2:CreateTags
+            Resource:
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*"
+          - Sid: EC2VPCEndpointTagging
+            Effect: Allow
+            Action:
+              - ec2:CreateTags
+              - ec2:DeleteTags
+            Resource:
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc-endpoint/*"
+          - Sid: EC2RunInstances
+            Effect: Allow
+            Action:
+              - ec2:RunInstances
+            Resource: "*"
+            # Reference: https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-launch-template-permissions.html
+          # Add IAM PassRole permission
+          - Sid: IAMPassRole
+            Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: "*"
+            Condition:
+              StringEquals:
+                iam:PassedToService:
+                  - ec2.amazonaws.com
+                  - autoscaling.amazonaws.com
+                  - ecs.amazonaws.com
+          - Sid: EC2SecurityGroups
+            Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:AuthorizeSecurityGroupEgress
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:DescribeSecurityGroups
+            Resource:
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+          - Sid: EC2ReadOnlyOperations
+            Effect: Allow
+            Action:
+              - ec2:DescribeImages
+              - ec2:DescribeInstances
+              - ec2:DescribeInstanceTypes
+              - ec2:DescribeKeyPairs
+              - ec2:DescribeSubnets
+              - ec2:DescribeVpcs
+              - ec2:DescribeVpcAttribute
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeRouteTables
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribePrefixLists
+              - ec2:DescribeLaunchTemplates
+              - ec2:DescribeLaunchTemplateVersions
+              - ec2:DescribeSecurityGroupRules
+              - ec2:DescribeNetworkInterfaceAttribute
+            Resource: "*"
+          - Sid: AutoScalingGroup
+            Effect: Allow
+            Action:
+              - autoscaling:CreateAutoScalingGroup
+              - autoscaling:DeleteAutoScalingGroup
+              - autoscaling:UpdateAutoScalingGroup
+              - autoscaling:SetDesiredCapacity
+              - autoscaling:TerminateInstanceInAutoScalingGroup
+              - autoscaling:CreateOrUpdateTags
+            Resource:
+              - !Sub "arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/wildlife-*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*"
+          - Sid: AutoScalingGroups
+            Effect: Allow
+            Action:
+              - autoscaling:DescribeAutoScalingGroups
+              - autoscaling:DescribeAutoScalingInstances
+              - autoscaling:DescribeScalingActivities
+            Resource: "*"  
+          - Sid: ApplicationAutoScaling
+            Effect: Allow
+            Action:
+              - application-autoscaling:RegisterScalableTarget
+              - application-autoscaling:DeregisterScalableTarget
+              - application-autoscaling:DescribeScalableTargets
+              - application-autoscaling:PutScalingPolicy
+              - application-autoscaling:DeleteScalingPolicy
+              - application-autoscaling:DescribeScalingPolicies
+              - application-autoscaling:DescribeScalingActivities
+              - application-autoscaling:TagResource
+              - application-autoscaling:UntagResource
+              - application-autoscaling:ListTagsForResource
+            Resource: "*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W13
+            reason: "Application Auto Scaling, Service Discovery, and EC2 describe operations require * resource per AWS documentation. Access scoped to account and region where possible."
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "Application Auto Scaling, Service Discovery, and EC2 describe operations require * resource per AWS documentation. Access scoped to account and region where possible."
+
+  # Infrastructure Policy (EC2, VPC, Auto Scaling)
+  iampolicymanagedinfrastructure2:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${PrefixCode}-iampolicy-infrastructure-2
+      Description: Infrastructure permissions (ELB, EFS)
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ELBLoadBalancers
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateLoadBalancer
+              - elasticloadbalancing:DeleteLoadBalancer
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+              - elasticloadbalancing:DescribeTags
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/app/wildlife-*/*"
+          - Sid: ELBDescribeOperations
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeTags
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:DescribeListenerAttributes
+            Resource: "*"
+          - Sid: ELBTargetGroups
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateTargetGroup
+              - elasticloadbalancing:DeleteTargetGroup
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeTargetGroupAttributes 
+              - elasticloadbalancing:ModifyTargetGroupAttributes
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:targetgroup/wildlife-*/*"
+          - Sid: ELBListeners
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateListener
+              - elasticloadbalancing:DeleteListener
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:ModifyListener
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource:
+              - !Sub "arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:listener/app/wildlife-*/*/*"
+              - !Sub "arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/app/wildlife-*/*"
+          - Sid: EFSFileSystemManagement
+            Effect: Allow
+            Action:
+              - elasticfilesystem:CreateFileSystem
+              - elasticfilesystem:DeleteFileSystem
+              - elasticfilesystem:ModifyFileSystem
+              - elasticfilesystem:ListTagsForResource
+            Resource:
+              - !Sub "arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/*"
+          - Sid: EFSCreation
+            Effect: Allow
+            Action:
+              - elasticfilesystem:CreateFileSystem
+              - elasticfilesystem:DescribeFileSystems
+              - elasticfilesystem:DescribeLifecycleConfiguration
+            Resource: "*"
+          - Sid: EFSTagging
+            Effect: Allow
+            Action:
+              - elasticfilesystem:TagResource
+              - elasticfilesystem:UntagResource
+            Resource: "*"
+          - Sid: EFSMountTargetManagement
+            Effect: Allow
+            Action:
+              - elasticfilesystem:ModifyMountTargetSecurityGroups
+            Resource:
+              - !Sub "arn:aws:efs:${AWS::Region}:${AWS::AccountId}:file-system/*"
+          - Sid: EFSMountTargetCreationandDeletion
+            Effect: Allow
+            Action:
+              - elasticfilesystem:CreateMountTarget
+              - elasticfilesystem:DescribeMountTargets
+              - elasticfilesystem:DeleteMountTarget
+              - elasticfilesystem:DescribeMountTargetSecurityGroups
+            Resource: "*"
+          - Sid: EC2InstanceTagging
+            Effect: Allow
+            Action:
+              - ec2:CreateTags
+            Resource:
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W13
+            reason: "Application Auto Scaling, Service Discovery, and EC2 describe operations require * resource per AWS documentation. Access scoped to account and region where possible."
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "Application Auto Scaling, Service Discovery, and EC2 describe operations require * resource per AWS documentation. Access scoped to account and region where possible."
+
+  # Support Services Policy (Lambda, IAM, CloudWatch, SSM, S3)
+  iampolicymanagedservices:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${PrefixCode}-iampolicy-services
+      Description: Support services permissions (Lambda, IAM, CloudWatch, SSM, S3)
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          # S3 Git Bucket Access for environment variable replacement
+          - Sid: S3GitBucketAccess
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:ListObjectsV2
+              - s3:GetObjectVersion
+              - s3:ListBucketVersions
+              - s3:DeleteObjectVersion
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}/*
+          # workshop helper fix GPS Lambda
+          - Sid: LambdaListFunctions  
+            Effect: Allow
+            Action:
+              - lambda:ListFunctions
+            Resource: "*"
+          - Sid: LambdaFunctionConfiguration
+            Effect: Allow
+            Action:
+              - lambda:UpdateFunctionConfiguration
+              - lambda:GetFunction
+              - lambda:GetFunctionConfiguration
+            Resource:
+              - !GetAtt lambdagpswildlife.Arn
+          - Sid: LambdaGPSrewire
+            Effect: Allow
+            Action:
+              - lambda:UpdateFunctionConfiguration
+              - lambda:GetFunction
+              - lambda:GetFunctionConfiguration
+            Resource:
+              - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function/wildlife-*"
+          - Sid: LambdaAccesstoKMS
+            Effect: Allow
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:GenerateDataKey
+              - kms:DescribeKey
+            Resource:
+              - !GetAtt kmskey.Arn
+
+          - Sid: IAMInstanceProfileAccess
+            Effect: Allow
+            Action:
+              - iam:GetInstanceProfile
+              - iam:ListInstanceProfiles
+            Resource: "*"
+          - Sid: IAMRolePolicyManagement
+            Effect: Allow
+            Action:
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:ListAttachedRolePolicies
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:ListRolePolicies
+            Resource:
+              - !Sub "arn:aws:iam::${AWS::AccountId}:role/wildlife-*"
+          - Sid: IAMListActions
+            Effect: Allow
+            Action:
+              - iam:ListPolicies
+              - iam:ListRoles
+            Resource: "*"
+          - Sid: IAMPolicyAccess
+            Effect: Allow
+            Action:
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:ListPolicyVersions
+            Resource:
+              - !Sub "arn:aws:iam::${AWS::AccountId}:policy/wildlife-*"
+          - Sid: CloudWatchLogsDescribe
+            Effect: Allow
+            Action:
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+            Resource: "*"
+          - Sid: CloudWatchLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+              - logs:PutRetentionPolicy
+              - logs:TagResource
+              - logs:UntagResource
+              - logs:GetLogEvents
+              - logs:FilterLogEvents
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/ecs/*"
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/ecs/*:*"
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*wildlife*"
+          - Sid: XRayAccess
+            Effect: Allow
+            Action:
+              - xray:GetTraceSummaries
+              - xray:BatchGetTraces
+              - xray:GetServiceMap
+              - xray:GetTimeSeriesServiceStatistics
+            Resource: "*"
+          - Sid: SSMParameterAccess
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+            Resource:
+              - !Sub "arn:aws:ssm:${AWS::Region}::parameter/aws/service/ecs/optimized-ami/*"
+          - Sid: KMSDescribe
+            Effect: Allow
+            Action:
+              - kms:DescribeKey
+              - kms:ListAliases
+            Resource: "*"
+          - Sid: KMSECRAccess
+            Effect: Allow
+            Action:
+              - kms:RetireGrant
+              - kms:CreateGrant
+              - kms:DescribeKey
+              - kms:ListAliases
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: 
+              - !GetAtt kmskey.Arn
+              - !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ecr"
+              - !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub "ecr.${AWS::Region}.amazonaws.com"
+          - Sid: IAMServiceLinkedRoles
+            Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+              - iam:AttachRolePolicy
+              - iam:PutRolePolicy
+            Resource: 
+              - "arn:aws:iam::*:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+              - "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+              - "arn:aws:iam::*:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: 
+                  - autoscaling.amazonaws.com
+                  - ecs.amazonaws.com
+                  - ecs.application-autoscaling.amazonaws.com
+          - Sid: DeletePyScriptS3Bucket
+            Effect: Allow
+            Action:
+              - s3:ListBucketVersions
+              - s3:DeleteObjectVersion
+              - s3:ListBucket
+              - s3:DeleteObject
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketgit}/*
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}
+              - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/*
+              - !If
+                - CreatePipeline
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}
+                - !Ref AWS::NoValue
+              - !If
+                - CreatePipeline
+                - !Sub arn:${AWS::Partition}:s3:::${s3bucketartifact}/*
+                - !Ref AWS::NoValue
+          - Sid: DeletePyScriptCloudFront
+            Effect: Allow
+            Action:
+              - cloudfront:GetDistributionConfig
+              - cloudfront:UpdateDistribution
+            Resource:
+              - !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${cloudfrontdistributioncodeserver}"    
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+          - id: W13
+            reason: "SSM Parameter Store access for AWS service parameters requires * resource per AWS documentation. Access scoped to specific parameter paths."
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: "SSM Parameter Store access for AWS service parameters requires * resource per AWS documentation. Access scoped to specific parameter paths."
+
+  # Application Data Access Policy - S3 and EFS for applications
+  iampolicymanagedapplicationdata:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${PrefixCode}-iampolicy-application-data
+      Description: Application data access permissions (S3, EFS)
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          # S3 - Wildlife bucket access
+          - Sid: S3WildlifeBucketAccess
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:ListObjectsV2
+              - s3:GetObjectVersion
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub "arn:aws:s3:::${s3bucketwildlife}"
+              - !Sub "arn:aws:s3:::${s3bucketwildlife}/*"
+          # EFS - Wildlife file system access
+          - Sid: EFSWildlifeAccess
+            Effect: Allow
+            Action:
+              - elasticfilesystem:ClientMount
+              - elasticfilesystem:ClientWrite
+              - elasticfilesystem:ClientRootAccess
+              - elasticfilesystem:DescribeFileSystems
+              - elasticfilesystem:DescribeMountTargets
+            Resource:
+              - !Sub "arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/*"
+              - !Sub "arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:mount-target/*"
+          # KMS - For S3 and EFS encryption
+          - Sid: KMSDataAccess
+            Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:GenerateDataKey
+            Resource:
+              - !GetAtt kmskey.Arn
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for workshop instructions and resource identification"
+###IAMPOLICYEND
+Outputs:
+  01CodeServerURL:
+    Description: URL to access code-server through CloudFront. Open in a separate tab and then return to collect password below!
+    Value: !Sub https://${cloudfrontdistributioncodeserver.DomainName}
+  02CodeServerPassword:
+    Description: Retrieve your initial code-server password from AWS Secrets Manager. If rotation is enabled, after 30 days check the 'rotating-codeserver' secret instead
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/secretsmanager/secret?name=${secretcodeserver}
+  03WildlifeAppURL:
+    Description: URL to access sample Wildlife application
+    Value: !Sub https://${cloudfrontdistributioncodeserver.DomainName}/wildlife

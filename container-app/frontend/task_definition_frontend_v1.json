@@ -1,0 +1,85 @@
+{
+    "family": "wildlife-frontend-task",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "1024",
+    "memory": "2048",
+    "runtimePlatform": {
+        "operatingSystemFamily": "LINUX",
+        "cpuArchitecture": "ARM64"
+    },
+    "networkMode": "awsvpc",
+    "executionRoleArn": "arn:aws:iam::REPLACE_AWS_ACCOUNT_ID:role/REPLACE_PREFIX_CODE-iamrole-ecs-task-execution",
+    "taskRoleArn": "arn:aws:iam::REPLACE_AWS_ACCOUNT_ID:role/REPLACE_PREFIX_CODE-iamrole-ecs-task",
+    "volumes": [
+        {
+            "name": "tmp-volume",
+            "host": {}       
+        }
+    ],
+    "containerDefinitions": [
+        {
+            "name": "wildlife-frontend",
+            "image": "REPLACE_AWS_ACCOUNT_ID.dkr.ecr.REPLACE_AWS_REGION.amazonaws.com/wildlife/frontend:latest",
+            "essential": true,
+            "readonlyRootFilesystem": true,
+            "portMappings": [
+                {
+                    "containerPort": 5000,
+                    "protocol": "tcp",
+                    "name": "frontend-http",
+                    "appProtocol": "http"
+                }
+            ],
+            "mountPoints": [
+                {
+                    "sourceVolume": "tmp-volume",
+                    "containerPath": "/tmp",
+                    "readOnly": false
+                }
+            ],
+            "environment": [
+                {
+                    "name": "AWS_XRAY_DAEMON_ADDRESS",
+                    "value": "localhost:2000"
+                },
+                {
+                "name": "BANNER_COLOR",
+                "value": "#CD5C5C"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-create-group": "true",
+                    "awslogs-group": "/aws/ecs/wildlife-frontend",
+                    "awslogs-region": "REPLACE_AWS_REGION",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            },
+            "dependsOn": [{
+                "containerName": "aws-xray-daemon",
+                "condition": "START"
+            }]
+        },
+        {
+            "name": "aws-xray-daemon",
+            "image": "public.ecr.aws/xray/aws-xray-daemon:latest",
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 2000,
+                    "protocol": "udp"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-create-group": "true",
+                    "awslogs-group": "/aws/ecs/xray-daemon",
+                    "awslogs-region": "REPLACE_AWS_REGION",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ]
+}

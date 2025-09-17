@@ -1,0 +1,31 @@
+# Alerts Service - Handles GPS tracking data and notifications for wildlife collars
+
+# Python base image
+FROM python:3.12-slim
+
+# Set the working directory
+WORKDIR /app
+
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
+
+# Install Python packages
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Copy application code
+COPY app.py .
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose port 5000 for Flask
+EXPOSE 5000
+
+# Run the application
+CMD ["python", "app.py"]
+
+# checkov:skip=CKV_DOCKER_2:Health checks handled by ECS Service Connect and internal monitoring. Docker HEALTHCHECK adds image bloat without significant benefit in orchestrated environments.

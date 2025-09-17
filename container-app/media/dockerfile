@@ -1,0 +1,32 @@
+# Media Service - Handles image upload, storage, and retrieval for wildlife sightings
+
+# Python base image
+
+
+# Set the working directory
+
+
+# Copy requirements first to leverage Docker cache
+
+
+# Install Python packages
+
+
+# Create non-root user
+
+
+# Copy application code
+
+
+
+# Switch to non-root user
+
+
+# Expose port 5000 for Flask
+
+
+# Run the application
+
+
+# checkov:skip=CKV_DOCKER_2:Health checks handled by ECS Service Connect and internal monitoring. Docker HEALTHCHECK adds image bloat without significant benefit in orchestrated environments.
+# checkov:skip=CKV_DOCKER_3:Dockerfile intentionally left incomplete for workshop exercise. Participants will complete the missing Docker commands as part of the learning experience.

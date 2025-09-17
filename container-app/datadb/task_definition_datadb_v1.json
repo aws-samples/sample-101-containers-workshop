@@ -1,0 +1,67 @@
+{
+    "family": "wildlife-datadb-task",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "512",
+    "memory": "1024",
+    "runtimePlatform": {
+        "operatingSystemFamily": "LINUX",
+        "cpuArchitecture": "ARM64"
+    },
+    "networkMode": "awsvpc",
+    "executionRoleArn": "arn:aws:iam::REPLACE_AWS_ACCOUNT_ID:role/REPLACE_PREFIX_CODE-iamrole-ecs-task-execution",
+    "taskRoleArn": "arn:aws:iam::REPLACE_AWS_ACCOUNT_ID:role/REPLACE_PREFIX_CODE-iamrole-ecs-task",
+    "containerDefinitions": [
+        {
+            "name": "wildlife-datadb",
+            "image": "REPLACE_AWS_ACCOUNT_ID.dkr.ecr.REPLACE_AWS_REGION.amazonaws.com/wildlife/datadb:latest",
+            "essential": true,
+            "readonlyRootFilesystem": false,
+            "portMappings": [
+                {
+                    "containerPort": 27017,
+                    "protocol": "tcp",
+                    "name": "data-tcp"
+                }
+            ],
+            "environment": [
+                {
+                    "name": "AWS_XRAY_DAEMON_ADDRESS",
+                    "value": "localhost:2000"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-create-group": "true",
+                    "awslogs-group": "/aws/ecs/wildlife-datadb",
+                    "awslogs-region": "REPLACE_AWS_REGION",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            },
+            "dependsOn": [{
+                "containerName": "aws-xray-daemon",
+                "condition": "START"
+            }]
+        },
+        {
+            "name": "aws-xray-daemon",
+            "image": "public.ecr.aws/xray/aws-xray-daemon:latest",
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 2000,
+                    "protocol": "udp"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-create-group": "true",
+                    "awslogs-group": "/aws/ecs/xray-daemon",
+                    "awslogs-region": "REPLACE_AWS_REGION",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ]
+}

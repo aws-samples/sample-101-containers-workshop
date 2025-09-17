@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wildlife Monitoring System</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" 
+          integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
+    <!-- DataTables CSS -->
+    <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet" 
+          integrity="sha384-ok3J6xA9oQqai5C9ytYveFsBeKgoGk4T+NExsr6hoIKjZdv9SJcmx2mafwUWRNf9" crossorigin="anonymous">
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.5.1/ol.css" 
+          integrity="sha384-7W8eqIZyRVVmTfY4EjNeg2AAJSJqbv4Nc3Az94jVP6ZggjoltxGAKIqFpJxNUhcM" crossorigin="anonymous">
+    <style>
+        :root {
+            --primary-color: {{ primary_color }};
+            --primary-hover: {{ primary_hover }};
+            --primary-light: {{ primary_light }};
+            --primary-shadow: {{ primary_shadow }};
+        }
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(180deg, var(--primary-color) 0%, var(--primary-color) 15%, #ffffff 40%);
+        }
+        .footer {
+            margin-top: auto;
+        }
+        #map {
+            height: 400px;
+            width: 100%;
+        }
+        .page-item.active .page-link {
+            background-color: #212529 !important;
+            border-color: #212529 !important;
+        }
+        .page-link {
+            color: #212529;
+        }
+        .page-link:hover {
+            color: #000000;
+        }
+        .ol-layer:first-child > canvas {
+            filter: none;
+        }
+        #gpsTable tbody tr {
+            height: 32px !important;
+        }
+        #gpsTable tbody td {
+            vertical-align: middle;
+        }
+        #gpsTable thead {
+            display: table-header-group !important;
+        }
+        #gpsTable th {
+            white-space: nowrap;
+            font-weight: normal;
+        }
+        .table th {
+            font-weight: normal;
+        }
+        .card-header {
+            font-weight: 600;
+            font-size: 1.1rem;
+            letter-spacing: 0.5px;
+        }
+        .navbar {
+            background-color: var(--primary-color);
+        }
+        .card {
+            border: none !important;
+        }
+        .ol-popup {
+            position: absolute;
+            background-color: white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #cccccc;
+            bottom: 12px;
+            left: -50px;
+            min-width: 280px;
+        }
+        .ol-popup:after, .ol-popup:before {
+            top: 100%;
+            border: solid transparent;
+            content: " ";
+            height: 0;
+            width: 0;
+            position: absolute;
+            pointer-events: none;
+        }
+        .ol-popup:after {
+            border-top-color: white;
+            border-width: 10px;
+            left: 48px;
+            margin-left: -10px;
+        }
+        .ol-popup:before {
+            border-top-color: #cccccc;
+            border-width: 11px;
+            left: 48px;
+            margin-left: -11px;
+        }
+        .popup-content h4 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: var(--primary-color);
+        }
+        .popup-content p {
+            margin: 0 0 5px 0;
+        }
+        .btn-success {
+            background: var(--primary-color);
+            border: none;
+            color: white;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px var(--primary-light);
+        }
+        .btn-success:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px var(--primary-shadow);
+        }
+        .btn-dark {
+            background: #495057;
+            border: none;
+            color: white;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(73, 80, 87, 0.2);
+        }
+        .btn-dark:hover {
+            background: #343a40;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(73, 80, 87, 0.3);
+        }
+        .card {
+            transition: transform 0.2s ease;
+        }
+        .table tbody td:active {
+            background-color: var(--primary-light) !important;
+        }
+        .table tbody tr:active {
+            background-color: var(--primary-light) !important;
+        }
+        .table tbody tr.selected {
+            background-color: var(--primary-light) !important;
+        }
+        .table tbody td::selection {
+            background-color: var(--primary-light) !important;
+        }
+        .table tbody tr::selection {
+            background-color: var(--primary-light) !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-banner">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <span class="navbar-brand mb-0 h1 text-white fw-bold">Wildlife Monitoring System</span>
+                <img src="/wildlife/static/logo.png" alt="Logo" height="30" class="banner-logo">
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <div class="row">
+            <!-- Left Column - Form and GPS Alerts -->
+            <div class="col-md-4">
+                <!-- Sighting Form Card -->
+                <div class="card mb-3">
+                    <div class="card-header" style="background: white !important; color: var(--primary-color) !important; border-bottom: 3px solid var(--primary-color) !important;">Report Wildlife Sighting</div>
+                    <div class="card-body">
+                        <div id="alertMessage" class="alert" style="display: none;" role="alert"></div>
+                        <form id="sightingForm" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="species" class="form-label">Species</label>
+                                <input type="text" class="form-control" id="species" name="species" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="habitat" class="form-label">Habitat Type</label>
+                                <select class="form-control" id="habitat" name="habitat" required>
+                                    <option value="">Select habitat...</option>
+                                    <option value="Forest">Forest</option>
+                                    <option value="Grassland">Grassland</option>
+                                    <option value="Wetland">Wetland</option>
+                                    <option value="Coastal">Coastal Area</option>
+                                    <option value="Mountain">Mountain</option>
+                                    <option value="River">River/Stream</option>
+                                    <option value="Agricultural">Agricultural Land</option>
+                                    <option value="Urban">Urban Area</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="latitude" class="form-label">Latitude</label>
+                                <input type="number" step="any" class="form-control" id="latitude" name="latitude" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="longitude" class="form-label">Longitude</label>
+                                <input type="number" step="any" class="form-control" id="longitude" name="longitude" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="count" class="form-label">Number of Animals</label>
+                                <input type="number" class="form-control" id="count" name="count" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="image" class="form-label">Image (optional)</label>
+                                <input type="file" class="form-control" id="image" name="image" accept="image/*">
+                            </div>
+                            <div class="btn-group">
+                                <button type="submit" class="btn btn-success">Submit Sighting</button>
+                                <button type="button" class="btn btn-dark" id="resetForm">Clear Selection</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- GPS Alerts Card -->
+                <div class="card">
+                    <div class="card-header" style="background: white !important; color: var(--primary-color) !important; border-bottom: 3px solid var(--primary-color) !important;">GPS Tracking Alerts</div>
+                    <div class="card-body">
+                        <table id="gpsTable" class="table table-striped table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Animal ID</th>
+                                    <th>Species</th>
+                                    <th>Battery</th>
+                                    <th>Status</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gpsList"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - Map and Sightings Table -->
+            <div class="col-md-8">
+                <!-- Map Card -->
+                <div class="card mb-3">
+                    <div class="card-header" style="background: white !important; color: var(--primary-color) !important; border-bottom: 3px solid var(--primary-color) !important;">Sighting Locations</div>
+                    <div class="card-body">
+                        <div id="map"></div>
+                    </div>
+                </div>
+                <!-- Sightings Table Card -->
+                <div class="card">
+                    <div class="card-header" style="background: white !important; color: var(--primary-color) !important; border-bottom: 3px solid var(--primary-color) !important;">Recent Sightings</div>
+                    <div class="card-body">
+                        <table id="sightingsTable" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Image</th>
+                                    <th>Species</th>
+                                    <th>Habitat</th>
+                                    <th>Count</th>
+                                    <th>Date/Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sightingsList"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto py-3 text-light" style="background: none; border-top: 1px solid #dee2e6;">
+        <div class="container text-center" style="color: #6c757d;">
+            Built with containers using <a href="https://aws.amazon.com/q/developer/" target="_blank" style="color: #6c757d;">Amazon Q for Developer</a>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" 
+            integrity="sha384-1H217gwSVyLSIfaLxHbE7dRb3v4mYCKbpQvzx0cegeju1MVsGrX5xXxAvs/HgeFs" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" 
+            integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js" 
+            integrity="sha384-cjmdOgDzOE22dUheI5E6Gzd3upfmReW8N1y/4jwKQE50KYcvFKZJA9JxWgQOzqwQ" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js" 
+            integrity="sha384-PgPBH0hy6DTJwu7pTf6bkRqPlf/+pjUBExpr/eIfzszlGYFlF9Wi9VTAJODPhgCO" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.5.1/dist/ol.js" 
+            integrity="sha384-fgnsY/cRU3yn34YpGkLBh/4lzNBJVh159U+7K2IypwCNY+hmOBsypjKU7ZPs9aI6" crossorigin="anonymous"></script>
+    
+    <script>
+        let dataTable;
+        let gpsDataTable;
+        let map;
+        let vectorSource;
+        let vectorLayer;
+        let selectionSource;
+        let selectionLayer;
+
+        function createPopupContent(point) {
+            let content = '<div class="popup-content">';
+            if (point.animal_id) {
+                // GPS tracking point
+                content += `
+                    <h4>${point.species}</h4>
+                    <p><strong>ID:</strong> ${point.animal_id}</p>
+                    <p><strong>Battery:</strong> ${point.battery}%</p>
+                    <p><strong>Last Updated:</strong> ${new Date(point.timestamp).toLocaleString()}</p>
+                `;
+            } else {
+                // Sighting point
+                content += `
+                    <h4>${point.species}</h4>
+                    <p><strong>Habitat:</strong> ${point.habitat}</p>
+                    <p><strong>Count:</strong> ${point.count}</p>
+                    <p><strong>Date:</strong> ${new Date(point.timestamp).toLocaleString()}</p>
+                `;
+            }
+            content += '</div>';
+            return content;
+        }
+
+        // Initialize the map
+        function initMap() {
+            vectorSource = new ol.source.Vector({});
+            vectorLayer = new ol.layer.Vector({
+                source: vectorSource
+            });
+
+            selectionSource = new ol.source.Vector({});
+            selectionLayer = new ol.layer.Vector({
+                source: selectionSource
+            });
+
+            const popupElement = document.createElement('div');
+            popupElement.className = 'ol-popup';
+            const popup = new ol.Overlay({
+                element: popupElement,
+                autoPan: true,
+                autoPanAnimation: {
+                    duration: 250
+                }
+            });
+
+            map = new ol.Map({
+                target: 'map',
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.XYZ({
+                            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                            attributions: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                        })
+                    }),
+                    vectorLayer,
+                    selectionLayer
+                ],
+                overlays: [popup],
+                view: new ol.View({
+                    center: ol.proj.fromLonLat([57.5704, -20.2759]), // Mauritius coordinates
+                    zoom: 9
+                })
+            });
+
+            // Combined click handler
+            map.on('click', function(evt) {
+                const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+                    return feature;
+                });
+
+                if (feature && feature.get('popupContent')) {
+                    // If clicking on a sighting or GPS feature, show popup
+                    const coordinates = feature.getGeometry().getCoordinates();
+                    popup.setPosition(coordinates);
+                    popupElement.textContent = feature.get('popupContent');
+                } else {
+                    // If clicking on the map (not on a feature), update coordinates
+                    const lonlat = ol.proj.transform(evt.coordinate, 'EPSG:3857', 'EPSG:4326');
+                    document.getElementById('longitude').value = lonlat[0].toFixed(6);
+                    document.getElementById('latitude').value = lonlat[1].toFixed(6);
+                    updateMarker([lonlat[0], lonlat[1]]);
+                    popup.setPosition(undefined); // Hide popup
+                }
+            });
+
+            // Optional: Change cursor to pointer when hovering over a feature
+            map.on('pointermove', function(e) {
+                if (e.dragging) return;
+
+                const pixel = map.getEventPixel(e.originalEvent);
+                const hit = map.hasFeatureAtPixel(pixel);
+
+                map.getTargetElement().style.cursor = hit ? 'pointer' : '';
+            });
+        }
+
+        // Update marker on map
+        function updateMarker(lonlat) {
+            selectionSource.clear();
+            if (lonlat.length) {
+                const feature = new ol.Feature({
+                    geometry: new ol.geom.Point(ol.proj.fromLonLat(lonlat))
+                });
+                const selectionStyle = new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({color: '#007bff'}),  // Bootstrap primary blue
+                        stroke: new ol.style.Stroke({color: 'white', width: 2})
+                    })
+                });
+                feature.setStyle(selectionStyle);
+                selectionSource.addFeature(feature);
+            }
+        }
+
+        // Update map with all markers
+        function updateMap(points) {
+            vectorSource.clear();
+            points.forEach(s => {
+                if (s.longitude && s.latitude) {
+                    const feature = new ol.Feature({
+                        geometry: new ol.geom.Point(ol.proj.fromLonLat([parseFloat(s.longitude), parseFloat(s.latitude)]))
+                    });
+                    
+                    // Different style for GPS markers vs sightings
+                    const style = s.animal_id ? 
+                        new ol.style.Style({
+                            image: new ol.style.Circle({
+                                radius: 6,
+                                fill: new ol.style.Fill({color: '#000000'}),
+                                stroke: new ol.style.Stroke({color: 'white', width: 2})
+                            })
+                        }) :
+                        new ol.style.Style({
+                            image: new ol.style.Circle({
+                                radius: 6,
+                                fill: new ol.style.Fill({color: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim()}),
+                                stroke: new ol.style.Stroke({color: 'white', width: 2})
+                            })
+                        });
+                    
+                    feature.setStyle(style);
+                    feature.set('popupContent', createPopupContent(s));
+                    vectorSource.addFeature(feature);
+                }
+            });
+        }
+
+        // Load sightings and update table/map
+        async function loadSightings() {
+            try {
+                const response = await fetch('/wildlife/api/sightings');
+                const sightings = await response.json();
+                
+                // Get GPS data
+                const gpsResponse = await fetch('/wildlife/api/gps');
+                const gpsData = await gpsResponse.json();
+                
+                // Process GPS data to get latest positions
+                const latestGPSData = {};
+                gpsData.forEach(data => {
+                    if (!latestGPSData[data.animal_id] || 
+                        new Date(data.timestamp) > new Date(latestGPSData[data.animal_id].timestamp)) {
+                        latestGPSData[data.animal_id] = data;
+                    }
+                });
+
+                if (dataTable) {
+                    dataTable.destroy();
+                }
+
+                const tbody = document.getElementById('sightingsList');
+                tbody.textContent = '';
+                sightings.forEach(s => {
+                    const row = tbody.insertRow();
+                    
+                    // Image cell
+                    const imageCell = row.insertCell();
+                    if (s.image_url) {
+                        const img = document.createElement('img');
+                        img.src = `/wildlife/api/images/${s.image_url}`;
+                        img.className = 'img-thumbnail';
+                        img.style.maxHeight = '50px';
+                        img.setAttribute('data-bs-toggle', 'popover');
+                        img.setAttribute('data-bs-trigger', 'hover');
+                        img.setAttribute('data-bs-html', 'true');
+                        img.setAttribute('data-bs-content', `<img src='/wildlife/api/images/${s.image_url}' class='img-fluid' style='max-height: 300px;'>`);
+                        img.alt = 'Hover to enlarge';
+                        imageCell.appendChild(img);
+                    } else {
+                        imageCell.textContent = 'No image';
+                    }
+                    
+                    // Species cell
+                    const speciesCell = row.insertCell();
+                    speciesCell.textContent = s.species;
+                    
+                    // Habitat cell
+                    const habitatCell = row.insertCell();
+                    habitatCell.textContent = s.habitat;
+                    
+                    // Count cell
+                    const countCell = row.insertCell();
+                    countCell.textContent = s.count;
+                    
+                    // Timestamp cell
+                    const timestampCell = row.insertCell();
+                    timestampCell.textContent = new Date(s.timestamp).toLocaleString();
+                });
+
+                // Initialize popovers
+                const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]')
+                const popoverList = [...popoverTriggerList].map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl, {
+                    container: 'body'
+                }))
+
+                // Initialize DataTable
+                dataTable = $('#sightingsTable').DataTable({
+                    order: [[4, 'desc']], 
+                    responsive: true
+                });
+
+                // Update map with both sightings and GPS data
+                updateMap([...sightings, ...Object.values(latestGPSData)]);
+
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function loadGPSData() {
+            try {
+                const response = await fetch('/wildlife/api/gps');
+                const gpsData = await response.json();
+                
+                // Get current sightings to maintain them on the map
+                const sightingsResponse = await fetch('/wildlife/api/sightings');
+                const sightings = await sightingsResponse.json();
+                
+                // Process GPS data to show latest status for each animal
+                const latestGPSData = {};
+                gpsData.forEach(data => {
+                    if (!latestGPSData[data.animal_id] || 
+                        new Date(data.timestamp) > new Date(latestGPSData[data.animal_id].timestamp)) {
+                        latestGPSData[data.animal_id] = data;
+                    }
+                });
+
+                // Sort by timestamp (newest first) and take only the last 11 entries
+                const sortedGPSData = Object.values(latestGPSData)
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                    .slice(0, 11);
+
+                // Destroy existing DataTable if it exists
+                if (gpsDataTable) {
+                    gpsDataTable.destroy();
+                }
+
+                const tbody = document.getElementById('gpsList');
+                tbody.textContent = '';
+                sortedGPSData.forEach(data => {
+                    const timestamp = new Date(data.timestamp);
+                    const timeDiff = (new Date() - timestamp) / 1000 / 60; // minutes
+                    let status;
+                    let statusClass;
+
+                    if (data.battery < 20) {
+                        status = 'Low Battery';
+                        statusClass = 'text-danger';
+                    } else if (timeDiff > 60) {
+                        status = 'Signal Lost';
+                        statusClass = 'text-danger';
+                    } else {
+                        status = 'Active';
+                        statusClass = 'text-success';
+                    }
+
+                    const row = tbody.insertRow();
+                    
+                    // Animal ID cell
+                    const idCell = row.insertCell();
+                    idCell.textContent = data.animal_id;
+                    
+                    // Species cell
+                    const speciesCell = row.insertCell();
+                    speciesCell.textContent = data.species;
+                    speciesCell.className = 'text-truncate';
+                    speciesCell.style.maxWidth = '150px';
+                    
+                    // Battery cell
+                    const batteryCell = row.insertCell();
+                    const progressDiv = document.createElement('div');
+                    progressDiv.className = 'progress';
+                    progressDiv.style.height = '15px';
+                    progressDiv.style.margin = '0';
+                    
+                    const progressBar = document.createElement('div');
+                    progressBar.className = `progress-bar ${data.battery < 20 ? 'bg-danger' : 'bg-success'}`;
+                    progressBar.setAttribute('role', 'progressbar');
+                    progressBar.style.width = `${data.battery}%`;
+                    progressBar.setAttribute('aria-valuenow', data.battery);
+                    progressBar.setAttribute('aria-valuemin', '0');
+                    progressBar.setAttribute('aria-valuemax', '100');
+                    progressBar.textContent = `${data.battery}%`;
+                    
+                    progressDiv.appendChild(progressBar);
+                    batteryCell.appendChild(progressDiv);
+                    
+                    // Status cell
+                    const statusCell = row.insertCell();
+                    const statusSpan = document.createElement('span');
+                    statusSpan.className = statusClass;
+                    statusSpan.textContent = status;
+                    statusCell.appendChild(statusSpan);
+                    
+                    // Timestamp cell
+                    const timestampCell = row.insertCell();
+                    timestampCell.textContent = timestamp.toISOString();
+                    timestampCell.setAttribute('data-sort', timestamp.getTime());
+                });
+
+                // Initialize DataTable with sorting on timestamp column
+                gpsDataTable = $('#gpsTable').DataTable({
+                    order: [[4, 'desc']],
+                    paging: false,
+                    pageLength: 11,
+                    searching: false,
+                    lengthChange: false,
+                    columnDefs: [
+                        {
+                            target: 4,
+                            visible: false
+                        }
+                    ],
+                    info: false
+                });
+
+                // Update map with both sightings and GPS data
+                updateMap([...sightings, ...sortedGPSData]);
+
+            } catch (error) {
+                console.error('Error loading GPS data:', error);
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('sightingForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const alertDiv = document.getElementById('alertMessage');
+            
+            try {
+                const response = await fetch('/wildlife/api/sightings', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim();
+                    alertDiv.style.backgroundColor = primaryColor;
+                    alertDiv.style.color = 'white';
+                    alertDiv.className = 'alert';
+                    alertDiv.textContent = 'Sighting reported successfully!';
+                    e.target.reset();
+                    selectionSource.clear(); // Clear selection marker
+                    await loadSightings();
+                } else {
+                    throw new Error('Failed to submit sighting');
+                }
+            } catch (error) {
+                alertDiv.style.backgroundColor = '#dc3545';
+                alertDiv.style.color = 'white';
+                alertDiv.className = 'alert';
+                alertDiv.textContent = 'Failed to submit sighting';
+            }
+            
+            alertDiv.style.display = 'block';
+            setTimeout(() => { alertDiv.style.display = 'none'; }, 3000);
+        };
+
+        // Add reset handler
+        document.getElementById('resetForm').onclick = function() {
+            document.getElementById('sightingForm').reset();
+            selectionSource.clear(); // Clear only the selection marker
+        };
+
+        // Initialize map and load data when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            loadSightings();
+            loadGPSData();
+            // Refresh GPS data every minute
+            setInterval(loadGPSData, 60000);
+        });
+    </script>
+</body>
+</html>

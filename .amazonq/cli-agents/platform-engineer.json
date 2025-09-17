@@ -1,0 +1,74 @@
+{
+  "name": "platform-engineer",
+  "description": "Platform engineering agent with container orchestration, infrastructure as code, and AWS services",
+  "tools": ["*"],
+  "allowedTools": ["fs_read"],
+  "resources": [
+    "file://README.md"
+  ],
+  "mcpServers": {
+    "awslabs.core-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.core-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
+    "awslabs.aws-documentation-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.aws-documentation-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "AWS_DOCUMENTATION_PARTITION": "aws"
+      }
+    },
+    "awslabs.ecs-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.ecs-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
+    "awslabs.eks-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.eks-mcp-server",
+        "--",
+        "--allow-write"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
+    "awslabs.terraform-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.terraform-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    }
+  }
+}

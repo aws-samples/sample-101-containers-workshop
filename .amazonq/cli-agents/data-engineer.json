@@ -1,0 +1,84 @@
+{
+  "name": "data-engineer",
+  "description": "Data and analytics agent with AWS data services, ETL pipelines, and analytics tools",
+  "tools": ["*"],
+  "allowedTools": ["fs_read"],
+  "resources": [
+    "file://README.md"
+  ],
+  "mcpServers": {
+    "awslabs.core-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.core-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
+    "awslabs.aws-documentation-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.aws-documentation-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "AWS_DOCUMENTATION_PARTITION": "aws"
+      }
+    },
+    "awslabs.s3-tables-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.s3-tables-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
+    "awslabs.dynamodb-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.dynamodb-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
+    "awslabs.cloudwatch-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.cloudwatch-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
+    "awslabs.redshift-mcp-server": {
+      "command": "uvenv",
+      "args": [
+        "run",
+        "--python",
+        "3.13",
+        "awslabs.redshift-mcp-server"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    }
+  }
+}
