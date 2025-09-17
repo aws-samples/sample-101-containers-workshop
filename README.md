@@ -1,6 +1,6 @@
 # AWS 101 - Containers Workshop
 
-> **Workshop Content**: For the complete workshop instructions and guided tutorials, visit the [AWS 101 Containers Workshop](https://catalog.workshops.aws/aws102/en-US).
+> For the complete workshop instructions and guided tutorials, visit [AWS 101 Containers Workshop](https://catalog.workshops.aws/aws102/en-US).
 
 This repository contains the source code, infrastructure templates, and supporting resources for the AWS 101 Containers Workshop - a hands-on learning experience for containerizing applications on AWS.
 
