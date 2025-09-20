@@ -20,7 +20,7 @@
                 {
                     "containerPort": 5000,
                     "protocol": "tcp",
-                    "name": "alerts-http",
+                    "name": "alerts-5000-tcp",
                     "appProtocol": "http"
                 }
             ],

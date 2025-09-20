@@ -20,7 +20,7 @@
                 {
                     "containerPort": 5000,
                     "protocol": "tcp",
-                    "name": "data-http"
+                    "name": "dataapi-5000-tcp"
                 }
             ],
             "environment": [

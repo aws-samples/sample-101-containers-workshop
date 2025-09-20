@@ -21,7 +21,7 @@
                 {
                     "containerPort": 27017,
                     "protocol": "tcp",
-                    "name": "data-tcp"
+                    "name": "datadb-27017-tcp"
                 }
             ],
             "environment": [
