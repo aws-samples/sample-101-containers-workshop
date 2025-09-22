@@ -494,7 +494,7 @@ create_ecs_services() {
         --desired-count 1 \
         --launch-type FARGATE \
         --network-configuration "awsvpcConfiguration={subnets=[REPLACE_PRIVATE_SUBNET_1,REPLACE_PRIVATE_SUBNET_2],securityGroups=[REPLACE_SECURITY_GROUP_APP],assignPublicIp=DISABLED}" \
-        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=data-tcp,discoveryName=REPLACE_PREFIX_CODE-datadb,clientAliases=[{port=27017}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
+        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=datadb-27017-tcp,discoveryName=REPLACE_PREFIX_CODE-datadb,clientAliases=[{port=27017}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
         --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100" \
         --no-cli-pager
 
@@ -509,7 +509,7 @@ create_ecs_services() {
         --desired-count 2 \
         --launch-type FARGATE \
         --network-configuration "awsvpcConfiguration={subnets=[REPLACE_PRIVATE_SUBNET_1,REPLACE_PRIVATE_SUBNET_2],securityGroups=[REPLACE_SECURITY_GROUP_APP],assignPublicIp=DISABLED}" \
-        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=data-http,discoveryName=REPLACE_PREFIX_CODE-dataapi,clientAliases=[{port=5000}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
+        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=dataapi-5000-tcp,discoveryName=REPLACE_PREFIX_CODE-dataapi,clientAliases=[{port=5000}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
         --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100" \
         --no-cli-pager
 
@@ -521,7 +521,7 @@ create_ecs_services() {
         --desired-count 2 \
         --launch-type FARGATE \
         --network-configuration "awsvpcConfiguration={subnets=[REPLACE_PRIVATE_SUBNET_1,REPLACE_PRIVATE_SUBNET_2],securityGroups=[REPLACE_SECURITY_GROUP_APP],assignPublicIp=DISABLED}" \
-        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=alerts-http,discoveryName=REPLACE_PREFIX_CODE-alerts,clientAliases=[{port=5000}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
+        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=alerts-5000-tcp,discoveryName=REPLACE_PREFIX_CODE-alerts,clientAliases=[{port=5000}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
         --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100" \
         --no-cli-pager
 
@@ -539,7 +539,7 @@ create_ecs_services() {
         --desired-count 2 \
         --capacity-provider-strategy capacityProvider="$CAPACITY_PROVIDER",weight=1 \
         --network-configuration "awsvpcConfiguration={subnets=[REPLACE_PRIVATE_SUBNET_1,REPLACE_PRIVATE_SUBNET_2],securityGroups=[REPLACE_SECURITY_GROUP_APP],assignPublicIp=DISABLED}" \
-        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=media-http,discoveryName=REPLACE_PREFIX_CODE-media,clientAliases=[{port=5000}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
+        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=media-5000-tcp,discoveryName=REPLACE_PREFIX_CODE-media,clientAliases=[{port=5000}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
         --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100" \
         --no-cli-pager
 
@@ -551,7 +551,7 @@ create_ecs_services() {
         --desired-count 2 \
         --launch-type FARGATE \
         --network-configuration "awsvpcConfiguration={subnets=[REPLACE_PRIVATE_SUBNET_1,REPLACE_PRIVATE_SUBNET_2],securityGroups=[REPLACE_SECURITY_GROUP_APP],assignPublicIp=DISABLED}" \
-        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=frontend-http,discoveryName=REPLACE_PREFIX_CODE-frontend,clientAliases=[{port=5000}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
+        --service-connect-configuration "enabled=true,namespace=REPLACE_PREFIX_CODE,services=[{portName=frontend-5000-tcp,discoveryName=REPLACE_PREFIX_CODE-frontend,clientAliases=[{port=5000}]}],logConfiguration={logDriver=awslogs,options={awslogs-group=/aws/ecs/service-connect/REPLACE_PREFIX_CODE-app,awslogs-region=REPLACE_AWS_REGION,awslogs-stream-prefix=REPLACE_PREFIX_CODE}}" \
         --load-balancers "targetGroupArn=$TG_ARN,containerName=REPLACE_PREFIX_CODE-frontend,containerPort=5000" \
         --deployment-configuration "maximumPercent=200,minimumHealthyPercent=100" \
         --no-cli-pager
