@@ -314,6 +314,7 @@ setup_vpc_endpoints() {
         --service-name com.amazonaws.REPLACE_AWS_REGION.ecr.api \
         --subnet-ids REPLACE_PRIVATE_SUBNET_1 REPLACE_PRIVATE_SUBNET_2 \
         --security-group-ids REPLACE_SECURITY_GROUP_APP \
+        --tag-specifications 'ResourceType=vpc-endpoint,Tags=[{Key=Name,Value=REPLACE_PREFIX_CODE-endpoint-ecr-api}]' \
         --no-cli-pager
 
     aws ec2 create-vpc-endpoint \
@@ -322,6 +323,7 @@ setup_vpc_endpoints() {
         --service-name com.amazonaws.REPLACE_AWS_REGION.ecr.dkr \
         --subnet-ids REPLACE_PRIVATE_SUBNET_1 REPLACE_PRIVATE_SUBNET_2 \
         --security-group-ids REPLACE_SECURITY_GROUP_APP \
+        --tag-specifications 'ResourceType=vpc-endpoint,Tags=[{Key=Name,Value=REPLACE_PREFIX_CODE-endpoint-ecr-api}]' \
         --no-cli-pager
         
     echo -e "${GREEN}VPC Endpoints created${NC}"
