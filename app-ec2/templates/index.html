@@ -364,24 +364,76 @@
                 })
             });
 
-            // Combined click handler
+            // Click handler with secure popup
             map.on('click', function(evt) {
                 const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
                     return feature;
                 });
 
-                if (feature && feature.get('popupContent')) {
-                    // If clicking on a sighting or GPS feature, show popup
+                if (feature && feature.get('popupData')) {
+                    // Show popup for features
                     const coordinates = feature.getGeometry().getCoordinates();
                     popup.setPosition(coordinates);
-                    popupElement.textContent = feature.get('popupContent');
+                    
+                    popupElement.textContent = '';
+                    const data = feature.get('popupData');
+                    
+                    const h4 = document.createElement('h4');
+                    h4.textContent = data.species;
+                    popupElement.appendChild(h4);
+                    
+                    if (data.animal_id) {
+                        // GPS data
+                        const idP = document.createElement('p');
+                        const idStrong = document.createElement('strong');
+                        idStrong.textContent = 'ID: ';
+                        idP.appendChild(idStrong);
+                        idP.appendChild(document.createTextNode(data.animal_id));
+                        popupElement.appendChild(idP);
+                        
+                        const batteryP = document.createElement('p');
+                        const batteryStrong = document.createElement('strong');
+                        batteryStrong.textContent = 'Battery: ';
+                        batteryP.appendChild(batteryStrong);
+                        batteryP.appendChild(document.createTextNode(data.battery + '%'));
+                        popupElement.appendChild(batteryP);
+                        
+                        const dateP = document.createElement('p');
+                        const dateStrong = document.createElement('strong');
+                        dateStrong.textContent = 'Last Updated: ';
+                        dateP.appendChild(dateStrong);
+                        dateP.appendChild(document.createTextNode(new Date(data.timestamp).toLocaleString()));
+                        popupElement.appendChild(dateP);
+                    } else {
+                        // Sighting data
+                        const habitatP = document.createElement('p');
+                        const habitatStrong = document.createElement('strong');
+                        habitatStrong.textContent = 'Habitat: ';
+                        habitatP.appendChild(habitatStrong);
+                        habitatP.appendChild(document.createTextNode(data.habitat));
+                        popupElement.appendChild(habitatP);
+                        
+                        const countP = document.createElement('p');
+                        const countStrong = document.createElement('strong');
+                        countStrong.textContent = 'Count: ';
+                        countP.appendChild(countStrong);
+                        countP.appendChild(document.createTextNode(data.count));
+                        popupElement.appendChild(countP);
+                        
+                        const dateP = document.createElement('p');
+                        const dateStrong = document.createElement('strong');
+                        dateStrong.textContent = 'Date: ';
+                        dateP.appendChild(dateStrong);
+                        dateP.appendChild(document.createTextNode(new Date(data.timestamp).toLocaleString()));
+                        popupElement.appendChild(dateP);
+                    }
                 } else {
-                    // If clicking on the map (not on a feature), update coordinates
+                    // Set coordinates for new sightings
                     const lonlat = ol.proj.transform(evt.coordinate, 'EPSG:3857', 'EPSG:4326');
                     document.getElementById('longitude').value = lonlat[0].toFixed(6);
                     document.getElementById('latitude').value = lonlat[1].toFixed(6);
                     updateMarker([lonlat[0], lonlat[1]]);
-                    popup.setPosition(undefined); // Hide popup
+                    popup.setPosition(undefined);
                 }
             });
 
@@ -442,7 +494,7 @@
                         });
                     
                     feature.setStyle(style);
-                    feature.set('popupContent', createPopupContent(s));
+                    feature.set('popupData', s);
                     vectorSource.addFeature(feature);
                 }
             });
