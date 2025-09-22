@@ -726,6 +726,9 @@ configure_service_scaling() {
     echo -e "${GREEN}Configuring Frontend Service Auto Scaling...${NC}"
     
     # AWS CLI COMMANDS: Configure ECS service auto scaling for frontend service
+    echo "Creating service-linked role for Application Auto Scaling..."
+    aws iam create-service-linked-role --aws-service-name ecs.application-autoscaling.amazonaws.com 2>/dev/null || echo "Service-linked role already exists"
+
     echo "Registering scalable target for frontend service..."
     aws application-autoscaling register-scalable-target \
         --service-namespace ecs \
