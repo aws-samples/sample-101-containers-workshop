@@ -46,7 +46,7 @@ This repository contains the source code, infrastructure templates, and supporti
    ```
 
 3. **Follow the workshop instructions:**
-   Visit the [AWS 101 Containers Workshop](https://catalog.workshops.aws/aws102/en-US) to run the workshop.
+   Visit the [AWS 101 Containers Workshop](https://catalog.us-east-1.prod.workshops.aws/workshops/52e6d7a4-b24a-43cc-90cc-82920d6988f0/en-US) to run the workshop.
 
 ## Contributing
 
