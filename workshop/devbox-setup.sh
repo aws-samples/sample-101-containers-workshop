@@ -73,9 +73,9 @@ install_component() {
     fi
 }
 
-#############################
-# CORE DEVELOPER ENVIRONMENT
-#############################
+##############################
+# CORE DEVELOPER ENVIRONMENT #
+##############################
 
 # Update system packages
 install_component "system_updated" '
@@ -295,14 +295,12 @@ if [ "${AUTO_SET_DEVELOPER_PROFILE}" = "true" ] && ! step_completed "developer_p
     ' "Failed to set AWS profile defaults"
 fi
 
-install_component "q_cli_prerequisites" '
-ARCH=$(detect_architecture)
-# Download and install Q CLI
-su - ec2-user -c "curl --proto \"=https\" --tlsv1.2 -sSf https://desktop-release.q.us-east-1.amazonaws.com/latest/q-${ARCH}-linux.zip -o /tmp/q.zip"
-cd /tmp
-unzip -o q.zip
-mv /tmp/q/* /usr/local/bin/
-chmod +x /usr/local/bin/q
+# Kiro installation
+install_component "Kiro CLI" '
+# Download and install Kiro CLI
+curl -fsSL https://cli.kiro.dev/install -o /tmp/install-kiro-cli.sh
+chown ec2-user:ec2-user /tmp/install-kiro-cli.sh
+sudo -u ec2-user bash /tmp/install-kiro-cli.sh
 
 # Install other prerequisites
 if [ "${UV_VERSION}" = "latest" ]; then
@@ -323,8 +321,7 @@ uvenv install --python ${MCP_PYTHON_VERSION} awslabs.ecs-mcp-server
 uvenv install --python ${MCP_PYTHON_VERSION} awslabs.eks-mcp-server
 uvenv install --python ${MCP_PYTHON_VERSION} awslabs.core-mcp-server
 uvenv install --python ${MCP_PYTHON_VERSION} awslabs.aws-documentation-mcp-server
-echo "NOTE: To complete Q CLI setup, see README for IAM IDC instructions"
-' "Failed to set up Amazon Q CLI prerequisites"
+' "Failed to set up Kiro prerequisites"
 
 #############################
 # WILDLIFE-SPECIFIC COMPONENTS
