@@ -215,7 +215,6 @@ usermod -aG docker ec2-user
 
 # Install VS Code extensions
 install_component "extensions_installed" '
-su - ec2-user -c "code-server --install-extension amazonwebservices.amazon-q-vscode --force"
 su - ec2-user -c "code-server --install-extension amazonwebservices.aws-toolkit-vscode --force"
 su - ec2-user -c "code-server --install-extension hashicorp.terraform --force"
 su - ec2-user -c "code-server --install-extension ms-azuretools.vscode-docker --force"
@@ -294,6 +293,11 @@ if [ "${AUTO_SET_DEVELOPER_PROFILE}" = "true" ] && ! step_completed "developer_p
     su - ec2-user -c "echo \"export AWS_ACCOUNTID=${AWS_ACCOUNT_ID}\" >> ~/.bashrc"
     ' "Failed to set AWS profile defaults"
 fi
+
+# Install build tools for MCP servers with C extensions
+install_component "build_tools_" '
+dnf install -y gcc python3-devel
+' "Failed to install build tools"
 
 # Kiro installation
 install_component "Kiro CLI" '
