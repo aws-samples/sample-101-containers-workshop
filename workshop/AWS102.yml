@@ -2742,6 +2742,9 @@ Resources:
               - !Sub arn:${AWS::Partition}:s3:::patch-baseline-snapshot-${AWS::Region}/*
               - !Sub arn:${AWS::Partition}:s3:::aws-patch-manager-${AWS::Region}-*/*
               - !Sub arn:${AWS::Partition}:s3:::aws-patchmanager-macos-${AWS::Region}-*/*
+              # Required for Session Manager plugin install
+              - !Sub arn:${AWS::Partition}:s3:::session-manager-downloads
+              - !Sub arn:${AWS::Partition}:s3:::session-manager-downloads/*
               # Required for S3 bucket emptying script
               - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}
               - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/*
