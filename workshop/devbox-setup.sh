@@ -236,7 +236,6 @@ fi
 install_component "git_remote_s3_installed" '
 dnf install git -y -q
 dnf install -y python3 python3-pip
-pip3 install boto3==${BOTO3_VERSION}
 if [ "${GIT_REMOTE_S3_VERSION}" = "latest" ]; then
     pip3 install git-remote-s3
 else
@@ -320,11 +319,6 @@ else
     pip3 install uvenv==${UVENV_VERSION}
 fi
 pip3 show uvenv || exit 1
-uvenv install --python ${MCP_PYTHON_VERSION} awslabs.terraform-mcp-server
-uvenv install --python ${MCP_PYTHON_VERSION} awslabs.ecs-mcp-server
-uvenv install --python ${MCP_PYTHON_VERSION} awslabs.eks-mcp-server
-uvenv install --python ${MCP_PYTHON_VERSION} awslabs.core-mcp-server
-uvenv install --python ${MCP_PYTHON_VERSION} awslabs.aws-documentation-mcp-server
 ' "Failed to set up Kiro prerequisites"
 
 #############################
