@@ -78,7 +78,7 @@ Parameters:
       - false
   CodeServerVersion:
     Type: String
-    Default: "4.105.1"
+    Default: "4.118.0"
     Description: Version of code-server to install. See available versions at github.com/coder/code-server/releases
   InstanceArchitecture:
     Type: String
@@ -264,7 +264,7 @@ Resources:
   kmskeyalias:
     Type: AWS::KMS::Alias
     Properties:
-      AliasName: !Sub alias/${PrefixCode}-kms-cmk
+      AliasName: !Sub alias/${PrefixCode}-kms-cmk-${AWS::StackName}
       TargetKeyId: !Ref kmskey
 
   ### Network Infrastructure - VPC with public/private subnets and flow logs for developer environment
@@ -1438,14 +1438,20 @@ Resources:
 
           # Download the setup script from GitHub and place it in per-boot directory
           echo "INFO: Downloading setup script from GitHub"
-          curl -s -o $SETUP_SCRIPT $GITHUB_RAW_URL
-          chmod +x $SETUP_SCRIPT
+          curl -fsSL --retry 3 --retry-delay 10 -o "$SETUP_SCRIPT" "$GITHUB_RAW_URL"
+          CURL_EXIT_CODE=$?
 
-          # Run the setup script for the first time
-          echo "INFO: Running initial setup"
-          source $ENV_FILE
-          $SETUP_SCRIPT
-          SETUP_EXIT_CODE=$?
+          if [ $CURL_EXIT_CODE -ne 0 ] || [ ! -s "$SETUP_SCRIPT" ]; then
+            echo "ERROR: Failed to download setup script from $GITHUB_RAW_URL (curl exit: $CURL_EXIT_CODE)"
+            SETUP_EXIT_CODE=1
+          else
+            chmod +x "$SETUP_SCRIPT"
+            # Run the setup script for the first time
+            echo "INFO: Running initial setup"
+            source "$ENV_FILE"
+            "$SETUP_SCRIPT"
+            SETUP_EXIT_CODE=$?
+          fi
 
           # Report setup status
           if [ $SETUP_EXIT_CODE -eq 0 ]; then
@@ -2458,7 +2464,9 @@ Resources:
             reason: "Lambda requires CloudWatch Logs access and SSM RunShellScript document permissions. GetRandomPassword requires * resource."
 
   ### Workshop pre-created resources
+
 ###IAMPOLICYSTART
+
   # ECS Task Execution role
   iamroleecstaskexecution:
     Type: AWS::IAM::Role
@@ -2745,6 +2753,7 @@ Resources:
               # Required for Session Manager plugin install
               - !Sub arn:${AWS::Partition}:s3:::session-manager-downloads
               - !Sub arn:${AWS::Partition}:s3:::session-manager-downloads/*
+
               # Required for S3 bucket emptying script
               - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}
               - !Sub arn:${AWS::Partition}:s3:::${s3bucketlogs}/*
