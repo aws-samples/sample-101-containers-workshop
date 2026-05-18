@@ -1345,6 +1345,7 @@ Resources:
         environment: !Sub ${EnvironmentTag}
   ec2codeserver:
     Type: AWS::EC2::Instance
+    DependsOn: s3endpoint
     Properties:
       ImageId: !If [IsArm64, !Ref AMIArmCodeServer, !Ref AMIx86CodeServer]
       InstanceType: !Ref InstanceType
