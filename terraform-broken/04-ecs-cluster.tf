@@ -23,7 +23,7 @@ resource "aws_ecs_cluster" "main" {
 
 # ECS Capacity Provider for EC2
 resource "aws_ecs_capacity_provider" "ec2" {
-  name = "${var.PrefixCode}-capacity-ec2"
+  name = "${var.PrefixCode}-capacity-ec2-tf"
 
   auto_scaling_group_provider {
     auto_scaling_group_arn         = aws_autoscaling_group.ecs.arn
