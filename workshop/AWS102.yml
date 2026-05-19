@@ -264,7 +264,7 @@ Resources:
   kmskeyalias:
     Type: AWS::KMS::Alias
     Properties:
-      AliasName: !Sub alias/${PrefixCode}-kms-cmk-${AWS::StackName}
+      AliasName: !Sub alias/${PrefixCode}-kms-cmk
       TargetKeyId: !Ref kmskey
 
   ### Network Infrastructure - VPC with public/private subnets and flow logs for developer environment
